@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Service Desk Hub</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%236366f1'/><path d='M9 17a7 7 0 0 1 14 0v4h-3v-5h3M9 16h3v5H9z' stroke='white' stroke-width='2' fill='none' stroke-linejoin='round'/></svg>" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#6366f1" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="disconnected">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 13a8 8 0 0 1 16 0v5h-4v-6h4M4 12h4v6H4z"/></svg>
+      </span>
+      <span>Service Desk <strong>Hub</strong></span>
+    </div>
+    <nav class="tabs" role="tablist">
+      <a href="#home" class="tab" data-tab="home">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+        Home
+      </a>
+      <a href="#pto" class="tab" data-tab="pto">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="3.5"/></svg>
+        PTO
+      </a>
+      <a href="#admin" class="tab" data-tab="admin">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>
+        Admin
+        <span class="badge" id="pending-badge" hidden></span>
+      </a>
+    </nav>
+    <div class="topbar-right" id="admin-status"></div>
+  </header>
+
+  <!-- CONNECT (shown until the shared folder is picked) -->
+  <section id="connect" class="connect-wrap">
+    <div class="card connect-card">
+      <span class="lock">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </span>
+      <div id="connect-body"><p class="muted">Loading…</p></div>
+    </div>
+  </section>
+
+  <main>
+    <!-- HOME -->
+    <section class="view" id="view-home">
+      <div class="home-head">
+        <div>
+          <p class="muted" id="home-dow">Today</p>
+          <h1 id="home-date"></h1>
+        </div>
+        <div class="cal-nav">
+          <button class="btn ghost icon" id="day-prev" aria-label="Previous day">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 6l-6 6 6 6"/></svg>
+          </button>
+          <button class="btn ghost" id="day-today">Today</button>
+          <button class="btn ghost icon" id="day-next" aria-label="Next day">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+          <span class="date-pick">
+            <button class="btn ghost icon" id="day-pick-btn" aria-label="Pick a date">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+            </button>
+            <input type="date" id="day-pick" tabindex="-1" aria-hidden="true" />
+          </span>
+        </div>
+      </div>
+
+      <div class="seg region-seg" id="region-tabs"></div>
+
+      <div id="coverage-banner" hidden></div>
+
+      <div class="stats" id="home-stats"></div>
+
+      <div class="home-grid">
+        <div class="card">
+          <div class="card-head">
+            <h2>Shift times</h2>
+            <div class="legend">
+              <span><i class="lg lg-work"></i>On shift</span>
+              <span><i class="lg lg-pending"></i>PTO pending</span>
+            </div>
+          </div>
+          <div id="timeline"></div>
+          <div class="sg-wrap">
+            <h3 class="sec-title">Start times</h3>
+            <div id="start-groups"></div>
+          </div>
+        </div>
+
+        <aside class="card day-panel" id="time-off"></aside>
+      </div>
+    </section>
+
+    <!-- PTO -->
+    <section class="view" id="view-pto" hidden>
+      <div class="card calendar-card">
+        <div class="cal-toolbar">
+          <div>
+            <h1 id="cal-title">Month</h1>
+            <p class="muted" id="cal-sub"></p>
+          </div>
+          <div class="cal-nav">
+            <button class="btn ghost icon" id="cal-prev" aria-label="Previous month">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 6l-6 6 6 6"/></svg>
+            </button>
+            <button class="btn ghost" id="cal-today">Today</button>
+            <button class="btn ghost icon" id="cal-next" aria-label="Next month">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="cal-filter">
+          <label class="muted small" for="pto-region">Region</label>
+          <select id="pto-region"></select>
+          <label class="muted small" for="cal-employee">Person</label>
+          <select id="cal-employee"></select>
+          <div class="legend">
+            <span><i class="lg lg-pto"></i>PTO approved</span>
+            <span><i class="lg lg-pending"></i>PTO pending</span>
+            <span class="muted">Click a day to request it off</span>
+          </div>
+        </div>
+        <div class="cal-head">
+          <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+        </div>
+        <div class="cal-grid weeks" id="cal-grid"></div>
+      </div>
+
+      <div class="pto-grid">
+        <form class="card form-card" id="pto-form" autocomplete="off">
+          <h2>Request time off</h2>
+          <p class="muted small">Requests show on the calendar as pending until an admin approves them.</p>
+          <label>Employee
+            <select name="employeeId" required></select>
+          </label>
+          <div class="row2">
+            <label>Start date <input type="date" name="start" required /></label>
+            <label>End date <input type="date" name="end" required /></label>
+          </div>
+          <label>Note <span class="muted small">(optional)</span>
+            <textarea name="note" rows="3" maxlength="300" placeholder="Anything the team should know"></textarea>
+          </label>
+          <p class="muted small" id="pto-days-hint"></p>
+          <button class="btn primary block" type="submit">Submit request</button>
+        </form>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Requests</h2>
+            <div class="seg" id="pto-filter">
+              <button type="button" data-f="all" class="on">All</button>
+              <button type="button" data-f="pending">Pending</button>
+              <button type="button" data-f="approved">Approved</button>
+              <button type="button" data-f="denied">Denied</button>
+            </div>
+          </div>
+          <div id="pto-list" class="list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ADMIN -->
+    <section class="view" id="view-admin" hidden>
+      <div id="admin-login" class="login-wrap">
+        <form class="card login-card" id="login-form">
+          <span class="lock">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          </span>
+          <h2>Admin sign in</h2>
+          <p class="muted small">Enter the admin PIN or your supervisor PIN.</p>
+          <input type="password" name="pin" placeholder="PIN" inputmode="numeric" required />
+          <button class="btn primary block" type="submit">Unlock</button>
+        </form>
+      </div>
+
+      <div id="admin-panel" hidden>
+        <div class="banner" id="conflict-banner" hidden>
+          <div>
+            <b>OneDrive found a sync conflict.</b>
+            Someone's change was saved to a separate copy instead of <code>data.json</code>: <span id="conflict-files"></span>.
+            Open that file in Notepad and re-enter anything missing here, then delete the copy.
+          </div>
+          <button class="btn ghost sm" id="recheck-conflicts">Check again</button>
+        </div>
+        <div class="stats" id="admin-stats"></div>
+        <div class="admin-grid">
+          <div class="card">
+            <div class="card-head">
+              <h2>Pending approvals</h2>
+            </div>
+            <div id="approval-list" class="list"></div>
+          </div>
+          <div class="card team-card">
+            <div class="card-head">
+              <h2>Team</h2>
+              <button class="btn primary sm admin-only" id="add-employee">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+                Add employee
+              </button>
+            </div>
+            <div id="team-list" class="list"></div>
+          </div>
+          <div class="card cov-card">
+            <div class="card-head">
+              <h2>Coverage hours</h2>
+              <span class="muted small">When the desk must be staffed. Gaps show as alerts on Home.</span>
+            </div>
+            <div class="cov-grid">
+              <form id="cov-form" class="admin-only" autocomplete="off">
+                <div class="sched" id="cov-editor"></div>
+                <div class="cov-actions">
+                  <button class="btn ghost sm" type="button" id="cov-reset">Mon–Fri 6 AM – 5 PM</button>
+                  <button class="btn primary sm" type="submit">Save coverage hours</button>
+                </div>
+              </form>
+              <div>
+                <h3 class="sec-title">Coverage gaps · next 14 days</h3>
+                <div id="cov-alerts" class="list"></div>
+              </div>
+            </div>
+          </div>
+          <div class="card adj-card">
+            <div class="card-head">
+              <h2>Schedule adjustments</h2>
+              <span class="muted small">Click someone's bar on the Home tab to add one</span>
+            </div>
+            <div id="adj-list" class="list"></div>
+          </div>
+          <div class="card settings-card admin-only">
+            <div class="card-head"><h2>Settings</h2></div>
+            <div class="settings-grid">
+              <div>
+                <span class="label">Shared data file</span>
+                <p class="muted small"><code id="folder-name"></code></p>
+                <button class="btn ghost sm" id="switch-folder">Switch folder</button>
+              </div>
+              <div>
+                <span class="label">Regions</span>
+                <div id="region-toggles" class="region-toggles"></div>
+                <p class="muted small">A hidden region and its people are left off the Home and PTO tabs. They stay listed here in Admin, so nothing is lost.</p>
+              </div>
+              <form id="pin-form" autocomplete="off">
+                <span class="label">Change admin PIN</span>
+                <div class="row2">
+                  <input type="password" name="newpin" placeholder="New PIN" required />
+                  <input type="password" name="confirmpin" placeholder="Confirm PIN" required />
+                </div>
+                <button class="btn ghost sm" type="submit">Update PIN</button>
+              </form>
+            </div>
+            <p class="muted small note">The PIN keeps admin buttons out of the way, but it isn't real security: anyone who can edit the shared folder can change <code>data.json</code>. Limit edit access to the folder if that matters.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Employee editor -->
+  <dialog id="emp-dialog">
+    <form method="dialog" id="emp-form" autocomplete="off">
+      <div class="dialog-head">
+        <h2 id="emp-dialog-title">Add employee</h2>
+        <button type="button" class="btn ghost icon" data-close aria-label="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="row3">
+        <label>Name <input name="name" required maxlength="60" placeholder="Full name" /></label>
+        <label>Role <select name="role" required></select></label>
+        <label>Region <select name="region" required></select></label>
+      </div>
+      <div class="field info-field">
+        <span class="label">Employee info</span>
+        <div class="info-grid">
+          <label><span class="lbl">Employee ID</span><input name="staffId" maxlength="40" placeholder="e.g. 104582" /></label>
+          <label><span class="lbl">Employee number <span class="muted">(if different)</span></span><input name="staffNumber" maxlength="40" placeholder="Optional" /></label>
+          <label><span class="lbl">Start date</span><input name="startDate" type="date" /></label>
+          <label class="span2"><span class="lbl">Email</span><input name="email" type="email" maxlength="120" placeholder="name@company.org" /></label>
+          <label><span class="lbl">Phone</span><input name="phone" type="tel" maxlength="40" placeholder="(920) 555-0142" /></label>
+        </div>
+      </div>
+      <div class="field sup-field">
+        <label class="toggle"><input type="checkbox" name="supervisor" /> Supervisor</label>
+        <div id="sup-pin" class="sup-pin" hidden>
+          <label for="sup-pin-input">Supervisor PIN</label>
+          <div class="pin-row">
+            <input id="sup-pin-input" name="supPin" type="password" maxlength="20" autocomplete="new-password" />
+            <button type="button" class="btn ghost sm" id="sup-show">Show</button>
+            <button type="button" class="btn ghost sm" id="sup-gen">Generate</button>
+          </div>
+          <p class="muted small">They sign in on the Admin tab with this PIN to approve PTO and adjust hours. Only you can see or reset it; they can't change it. Type a new PIN to reset it.</p>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">Color</span>
+        <div class="swatches" id="swatches"></div>
+      </div>
+      <div class="field">
+        <div class="label-row">
+          <span class="label">Weekly schedule</span>
+          <div class="presets">
+            <button type="button" class="btn ghost xs" data-preset="weekdays">Mon–Fri 8–5</button>
+            <button type="button" class="btn ghost xs" data-preset="clear">Clear</button>
+          </div>
+        </div>
+        <div class="sched" id="sched-editor"></div>
+      </div>
+      <div class="dialog-foot">
+        <button type="button" class="btn ghost" data-close>Cancel</button>
+        <button type="submit" class="btn primary" value="save">Save employee</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Menu shown when a shift bar is clicked -->
+  <div class="pop" id="bar-menu" hidden>
+    <div class="pop-head" id="bar-menu-head"></div>
+    <button type="button" data-act="meeting">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4M12 12v5M9.5 14.5h5"/></svg>
+      Add meeting block
+    </button>
+    <button type="button" data-act="adjust">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      Adjust hours
+    </button>
+  </div>
+
+  <!-- Meeting block -->
+  <dialog id="mtg-dialog" class="mid-dialog">
+    <form id="mtg-form" autocomplete="off">
+      <div class="dialog-head">
+        <h2 id="mtg-title">Add meeting block</h2>
+        <button type="button" class="btn ghost icon" data-close aria-label="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <p class="muted small" id="mtg-sub"></p>
+      <label>Meeting name <input name="mtgName" required maxlength="60" placeholder="e.g. Team standup" /></label>
+      <div class="row2">
+        <label>Start time <input type="time" name="mtgStart" step="300" required /></label>
+        <label>End time <input type="time" name="mtgEnd" step="300" required /></label>
+      </div>
+      <div class="dialog-foot">
+        <button type="button" class="btn ghost danger-text" id="mtg-delete" hidden>Delete</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" data-close>Cancel</button>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Adjust hours (override) -->
+  <dialog id="ovr-dialog" class="mid-dialog">
+    <form id="ovr-form" autocomplete="off">
+      <div class="dialog-head">
+        <h2 id="ovr-title">Adjust hours</h2>
+        <button type="button" class="btn ghost icon" data-close aria-label="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <p class="muted small" id="ovr-usual"></p>
+      <div class="row2">
+        <label>From <input type="date" name="start" required /></label>
+        <label>To <input type="date" name="end" required /></label>
+      </div>
+      <div class="row2">
+        <label>Start time <input type="time" name="startTime" step="900" required /></label>
+        <label>End time <input type="time" name="endTime" step="900" required /></label>
+      </div>
+      <label>Note <span class="muted small">(optional)</span>
+        <input name="note" maxlength="120" placeholder="e.g. Training, covering late shift" />
+      </label>
+      <label class="toggle"><input type="checkbox" name="allDays" /> Include their regular days off</label>
+      <p class="muted small" id="ovr-hint"></p>
+      <div class="banner small-banner" id="ovr-existing" hidden>
+        <span id="ovr-existing-text"></span>
+        <button type="button" class="btn ghost sm" id="ovr-remove">Remove adjustment</button>
+      </div>
+      <div class="dialog-foot">
+        <button type="button" class="btn ghost" data-close>Cancel</button>
+        <button type="submit" class="btn primary">Save hours</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Admin PIN re-check (needed to view or set supervisor PINs) -->
+  <dialog id="pin-prompt" class="small-dialog">
+    <form id="pin-prompt-form" autocomplete="off">
+      <h2>Confirm admin PIN</h2>
+      <p class="muted small">Needed to view or set supervisor PINs.</p>
+      <input type="password" name="pp" placeholder="Admin PIN" required />
+      <div class="dialog-foot">
+        <button type="button" class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="submit" class="btn primary">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Confirm -->
+  <dialog id="confirm-dialog" class="small-dialog">
+    <form method="dialog">
+      <h2 id="confirm-title">Are you sure?</h2>
+      <p class="muted" id="confirm-msg"></p>
+      <div class="dialog-foot">
+        <button class="btn ghost" value="cancel">Cancel</button>
+        <button class="btn danger" value="ok">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
