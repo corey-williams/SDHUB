@@ -279,7 +279,7 @@
     const fallback = {
       start: on[0]?.start || '06:00',
       end: on[0]?.end || '17:00',
-      days: legacy.map((d, i) => (d.on ? i : -1)).filter((i) => i >= 0),
+      days: legacy.map((d, i) => (d.on ? i : -1)).filter((i) => i >= 1 && i <= 5),
     };
     if (!fallback.days.length) fallback.days = [1, 2, 3, 4, 5];
     const out = {};
@@ -289,7 +289,8 @@
         ? {
             start: TIME_RE.test(c.start) ? c.start : fallback.start,
             end: TIME_RE.test(c.end) ? c.end : fallback.end,
-            days: Array.isArray(c.days) ? c.days.filter((d) => Number.isInteger(d) && d >= 0 && d < 7) : fallback.days,
+            // Weekdays only: Saturday and Sunday are never checked for coverage.
+            days: Array.isArray(c.days) ? c.days.filter((d) => Number.isInteger(d) && d >= 1 && d <= 5) : fallback.days,
           }
         : { ...fallback, days: [...fallback.days] };
     }
@@ -1445,7 +1446,7 @@
   // Admin → Coverage hours: one row per shown region with a start/end time
   // and the weekdays it applies.
   function renderCoverageEditor() {
-    const order = [1, 2, 3, 4, 5, 6, 0];
+    const order = [1, 2, 3, 4, 5]; // coverage is weekdays only
     $('#cov-editor').innerHTML = REGIONS.filter((r) => !isHidden(r))
       .map((r) => {
         const c = regionCoverage(r);
