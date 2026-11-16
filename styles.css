@@ -174,7 +174,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .legend span { display: flex; align-items: center; gap: 6px; }
 .lg { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .lg-work { background: var(--accent); }
-.lg-pto { background: repeating-linear-gradient(135deg, var(--warn) 0 3px, #fcd38a 3px 6px); }
+.lg-pto { background: repeating-linear-gradient(135deg, var(--muted) 0 3px, #d7d9e6 3px 6px); }
+#view-pto .lg-pending { border-color: var(--muted); }
 .lg-pending { border: 1.5px dashed var(--warn); }
 
 .cal-head, .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
@@ -438,10 +439,12 @@ body.is-supervisor .admin-only { display: none !important; }
 .pto-bar {
   pointer-events: auto; cursor: pointer; margin: 0 6px; height: 22px; line-height: 22px; padding: 0 8px;
   border-radius: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  background: repeating-linear-gradient(135deg, #fff1d6 0 5px, #ffe2a8 5px 10px); color: #92400e;
+  /* Diagonal stripes in the employee's own color (set as --c on each bar). */
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 14%, white) 0 5px, color-mix(in srgb, var(--c) 30%, white) 5px 10px);
+  color: color-mix(in srgb, var(--c) 72%, black);
 }
 .pto-bar:hover { filter: brightness(.96); }
-.pto-bar.pending { background: var(--surface); border: 1.5px dashed var(--warn); line-height: 19px; color: #92400e; }
+.pto-bar.pending { background: var(--surface); border: 1.5px dashed var(--c); line-height: 19px; color: color-mix(in srgb, var(--c) 72%, black); }
 .pto-bar em { font-style: normal; font-weight: 500; opacity: .75; margin-left: 4px; }
 .pto-bar.cont-l { margin-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .pto-bar.cont-r { margin-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
