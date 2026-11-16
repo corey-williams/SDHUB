@@ -3,8 +3,8 @@
 // to GitHub show up on the next open. The cache is only a fallback for when
 // the network is down. Team data never goes through here: it lives in
 // data.json in the OneDrive folder each person picked.
-const CACHE = 'sdh-v2';
-const FILES = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './favicon.png', './icon-192.png', './icon-512.png'];
+const CACHE = 'sdh-v3';
+const FILES = ['./', './index.html', './styles.css', './app.js', './favicon.png', './app-icon-192.png', './app-icon-512.png'];
 
 self.addEventListener('install', (ev) => {
   ev.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).catch(() => {}));

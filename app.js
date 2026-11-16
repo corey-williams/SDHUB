@@ -1307,7 +1307,7 @@
     const used = new Set(S.employees.map((x) => x.color));
     S.editColor = e ? e.color : COLORS.find((c) => !used.has(c)) || COLORS[0];
     renderSwatches();
-    renderSchedEditor(e ? e.schedule : DAY_NAMES.map((_, i) => ({ on: i > 0 && i < 6, start: '08:00', end: '17:00' })));
+    loadEmpSchedule(e ? e.schedule : DAY_NAMES.map((_, i) => ({ on: i > 0 && i < 6, start: '08:00', end: '17:00' })));
     const el = f.elements;
     for (const k of ['staffId', 'staffNumber', 'email', 'phone', 'startDate']) el[k].value = e?.[k] || '';
     // Supervisor access: the PIN box starts empty; leaving it empty keeps the current PIN.
@@ -1326,6 +1326,70 @@
     $('#swatches').innerHTML = COLORS.map(
       (c) => `<button type="button" class="swatch ${c === S.editColor ? 'on' : ''}" style="--c:${c}" data-color="${c}" aria-label="Color ${c}"></button>`
     ).join('');
+  }
+
+  // ---------- employee weekly schedule (two modes) ----------
+  // "simple": one start/end time + the days they work. "advanced": each day
+  // has its own hours. Both produce the same 7-day schedule when saved.
+  function readSimpleSchedule() {
+    const start = $('#ss-start').value || '08:00';
+    const end = $('#ss-end').value || '17:00';
+    const on = new Set($$('#ss-days .on').map((b) => Number(b.dataset.dow)));
+    return DAY_NAMES.map((_, i) => ({ on: on.has(i), start, end }));
+  }
+  // The hours used on the most working days (Monday-first on a tie).
+  function commonHours(sched) {
+    const counts = new Map();
+    for (const i of [1, 2, 3, 4, 5, 6, 0]) {
+      const d = sched[i];
+      if (!d.on) continue;
+      const k = `${d.start}|${d.end}`;
+      counts.set(k, (counts.get(k) || 0) + 1);
+    }
+    let best = null, n = 0;
+    for (const [k, c] of counts) if (c > n) [best, n] = [k, c];
+    if (!best) return { start: '08:00', end: '17:00' };
+    const [start, end] = best.split('|');
+    return { start, end };
+  }
+  function fillSimpleSchedule(sched) {
+    const h = commonHours(sched);
+    $('#ss-start').value = h.start;
+    $('#ss-end').value = h.end;
+    $$('#ss-days [data-dow]').forEach((b) => b.classList.toggle('on', !!sched[Number(b.dataset.dow)].on));
+  }
+  function showSchedMode(mode) {
+    S.schedMode = mode;
+    $$('#sched-mode [data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
+    $('#sched-simple').hidden = mode !== 'simple';
+    $('#sched-advanced').hidden = mode !== 'advanced';
+  }
+  // Open in "simple" when every working day has the same hours.
+  function loadEmpSchedule(sched) {
+    const on = sched.filter((d) => d.on);
+    const uniform = on.every((d) => d.start === on[0].start && d.end === on[0].end);
+    fillSimpleSchedule(sched);
+    renderSchedEditor(sched);
+    showSchedMode(uniform ? 'simple' : 'advanced');
+  }
+  // Switching carries the current choices across.
+  function setSchedMode(mode) {
+    if (mode === S.schedMode) return;
+    if (mode === 'advanced') {
+      renderSchedEditor(readSimpleSchedule());
+    } else {
+      const sched = readSchedEditor();
+      const on = sched.filter((d) => d.on);
+      if (on.some((d) => d.start !== on[0].start || d.end !== on[0].end)) {
+        const h = commonHours(sched);
+        toast(`All selected days will use ${fmtTime(h.start)} – ${fmtTime(h.end)}. Switch back before saving to keep the different hours.`);
+      }
+      fillSimpleSchedule(sched);
+    }
+    showSchedMode(mode);
+  }
+  function readEmpSchedule() {
+    return S.schedMode === 'simple' ? readSimpleSchedule() : readSchedEditor();
   }
 
   function renderSchedEditor(sched, target = '#sched-editor') {
@@ -1850,10 +1914,20 @@
     $('#sched-editor').addEventListener('change', (ev) => {
       if (ev.target.type === 'checkbox') ev.target.closest('.sched-row').classList.toggle('off', !ev.target.checked);
     });
-    $('.presets').onclick = (ev) => {
-      const p = ev.target.closest('[data-preset]');
-      if (!p) return;
-      renderSchedEditor(DAY_NAMES.map((_, i) => ({ on: p.dataset.preset === 'weekdays' && i > 0 && i < 6, start: '08:00', end: '17:00' })));
+    // Weekly schedule: Same hours (simple) vs. Different hours per day (advanced)
+    $('#sched-mode').onclick = (ev) => {
+      const b = ev.target.closest('[data-mode]');
+      if (b) setSchedMode(b.dataset.mode);
+    };
+    $('#ss-days').onclick = (ev) => {
+      const b = ev.target.closest('[data-dow]');
+      if (b) b.classList.toggle('on');
+    };
+    $('.ss-quick').onclick = (ev) => {
+      const b = ev.target.closest('[data-days]');
+      if (!b) return;
+      const want = new Set(b.dataset.days.split(','));
+      $$('#ss-days [data-dow]').forEach((d) => d.classList.toggle('on', want.has(d.dataset.dow)));
     };
     $('#emp-form').onsubmit = async (ev) => {
       ev.preventDefault();
@@ -1864,7 +1938,7 @@
         const el = f.elements;
         clean = cleanEmployee(
           {
-            name: el.name.value, role: el.role.value, region: el.region.value, color: S.editColor, schedule: readSchedEditor(),
+            name: el.name.value, role: el.role.value, region: el.region.value, color: S.editColor, schedule: readEmpSchedule(),
             staffId: el.staffId.value, staffNumber: el.staffNumber.value, email: el.email.value, phone: el.phone.value, startDate: el.startDate.value,
           },
           prev?.role

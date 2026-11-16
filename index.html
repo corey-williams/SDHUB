@@ -4,10 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Service Desk Hub</title>
-  <link rel="icon" type="image/png" href="favicon.png" />
-  <link rel="manifest" href="manifest.webmanifest" />
+  <!-- ?v=2: bump this number whenever icons change, so browsers fetch fresh copies -->
+  <link rel="icon" type="image/png" href="favicon.png?v=2" />
+  <link rel="manifest" href="manifest.webmanifest?v=2" />
   <meta name="theme-color" content="#6366f1" />
-  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="apple-touch-icon" href="app-icon-192.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body class="disconnected">
@@ -301,12 +302,35 @@
       <div class="field">
         <div class="label-row">
           <span class="label">Weekly schedule</span>
-          <div class="presets">
-            <button type="button" class="btn ghost xs" data-preset="weekdays">Mon–Fri 8–5</button>
-            <button type="button" class="btn ghost xs" data-preset="clear">Clear</button>
+          <div class="seg" id="sched-mode">
+            <button type="button" data-mode="simple" class="on">Same hours</button>
+            <button type="button" data-mode="advanced">Different hours per day</button>
           </div>
         </div>
-        <div class="sched" id="sched-editor"></div>
+
+        <!-- Same hours every working day -->
+        <div class="sched-simple" id="sched-simple">
+          <div class="ss-times">
+            <label><span class="lbl">Start</span><input type="time" id="ss-start" step="900" value="08:00" /></label>
+            <span class="muted ss-to">to</span>
+            <label><span class="lbl">End</span><input type="time" id="ss-end" step="900" value="17:00" /></label>
+          </div>
+          <div class="ss-days-row">
+            <span class="lbl">Works on</span>
+            <div class="ss-days" id="ss-days">
+              <button type="button" data-dow="1">Mon</button><button type="button" data-dow="2">Tue</button><button type="button" data-dow="3">Wed</button><button type="button" data-dow="4">Thu</button><button type="button" data-dow="5">Fri</button><button type="button" data-dow="6">Sat</button><button type="button" data-dow="0">Sun</button>
+            </div>
+            <div class="ss-quick">
+              <button type="button" class="btn ghost xs" data-days="1,2,3,4,5">Mon–Fri</button>
+              <button type="button" class="btn ghost xs" data-days="0,1,2,3,4,5,6">Every day</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Each day with its own hours -->
+        <div id="sched-advanced" hidden>
+          <div class="sched" id="sched-editor"></div>
+        </div>
       </div>
       <div class="dialog-foot">
         <button type="button" class="btn ghost" data-close>Cancel</button>
