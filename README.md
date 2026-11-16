@@ -10,7 +10,10 @@ The service desk's team calendar, schedules and PTO.
 - **Home**: a breakdown of one day, today by default (‹ › or the arrow keys change the day). Region buttons switch between All regions, Bellin, Gundersen, Research and Emplify, and each person's browser remembers their choice. The page shows:
   - each person's shift as a bar on a time graph, with a "Now" line and how many people are on shift each hour
   - start times grouped, for example "7 AM: Taylor, Morgan"
-  - who's on PTO, who has PTO pending and who isn't scheduled
+  - **Events** panel, which updates automatically every 30 seconds:
+    - **PTO** at the top: who's out that day, plus anyone with PTO pending
+    - **Today:** a live feed of up to 10 items. First what's happening now ("Alex is on break · until 3:12 PM"), then what's coming up in time order ("Jordan's shift starts · in 5 min", "Taylor has lunch · in 10 min", "Morgan's shift ends · in 57 min"). For other days it shows that day's schedule with clock times.
+    - **Not scheduled:** who has the day off (admins can **Add shift** from here)
   - **Meeting blocks (everyone):** click someone's bar and choose **Add meeting block**. Enter the meeting name and start and end times; the start time defaults to where you clicked. The meeting shows as a striped section on their bar with its name. Click a block to edit or delete it.
     - **Repeats:** a meeting can repeat every day, every week, every 2 weeks or every month (same date), with an optional **Until** date. Repeating blocks show **↻**. It only appears on days the person is working.
     - When you edit or delete a repeating meeting, choose **This day only** (e.g. move or cancel one week's standup) or **Every day in the series**. "Available by hour" doesn't count someone for an hour they spend entirely in meetings.
@@ -18,6 +21,7 @@ The service desk's team calendar, schedules and PTO.
   - **Adding a shift on a day off (admins):** people under "Not scheduled" have an **Add shift** button. Their bar then shows "Extra shift". Remove one from the same window or from Admin → Schedule adjustments.
 - **PTO**: a month calendar that shows only time off (approved and pending), filterable by region and person. Click a day to start a request for it. Below the calendar are the request form and the list of requests.
 - **Admin** (PIN): approve or deny PTO, and add, edit or remove employees. Each employee has a role (IT Support Technician Associate, IT Support Technician or IT Support Technician Senior), a region and a weekly schedule. The team list is grouped by region.
+  - **Breaks & lunch:** in **Edit employee**, switch on Break 1, Lunch and/or Break 2, and set each one's start time and length. They're the same on every working day. On Home they show as grey striped sections in the person's shift bar (hover for exact times). They count as "not available" for coverage, like meetings, so a region with everyone at lunch shows a gap.
   - **Employee info:** each employee can have an Employee ID, an employee number (only if different), email, phone and start date. All are optional. Employee IDs must be unique, and 10-digit phone numbers are formatted automatically. The team list shows these under each name, with email and phone as clickable links and time with the company next to the start date.
   - **Supervisors:** in **Edit employee**, turn on **Supervisor** and type or **Generate** a PIN. Supervisors sign in on the Admin tab with that PIN.
     - They can: approve, deny and reopen PTO; adjust hours and add shifts; see coverage alerts; add, edit and remove employees, including employee info and schedules.

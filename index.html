@@ -81,6 +81,8 @@
             <h2>Shift times</h2>
             <div class="legend">
               <span><i class="lg lg-work"></i>On shift</span>
+              <span><i class="lg lg-brk"></i>Break / lunch</span>
+              <span><i class="lg lg-mtg"></i>Meeting</span>
               <span><i class="lg lg-pending"></i>PTO pending</span>
             </div>
           </div>
@@ -152,8 +154,8 @@
           <div class="card-head">
             <h2>Requests</h2>
             <div class="seg" id="pto-filter">
-              <button type="button" data-f="all" class="on">All</button>
-              <button type="button" data-f="pending">Pending</button>
+              <button type="button" data-f="all">All</button>
+              <button type="button" data-f="pending" class="on">Pending</button>
               <button type="button" data-f="approved">Approved</button>
               <button type="button" data-f="denied">Denied</button>
             </div>
@@ -330,6 +332,31 @@
         <!-- Each day with its own hours -->
         <div id="sched-advanced" hidden>
           <div class="sched" id="sched-editor"></div>
+        </div>
+      </div>
+
+      <!-- Breaks and lunch: the same on every working day -->
+      <div class="field">
+        <div class="label-row">
+          <span class="label">Breaks &amp; lunch</span>
+          <span class="muted small">Same on every day they work</span>
+        </div>
+        <div class="brk-box" id="brk-box">
+          <div class="brk-row" data-k="b0">
+            <label class="toggle"><input type="checkbox" class="b-on" /> Break 1</label>
+            <input type="time" class="b-start" step="300" value="10:00" aria-label="Break 1 start" />
+            <select class="b-mins" aria-label="Break 1 length"><option value="10">10 min</option><option value="15" selected>15 min</option><option value="20">20 min</option><option value="30">30 min</option></select>
+          </div>
+          <div class="brk-row" data-k="lunch">
+            <label class="toggle"><input type="checkbox" class="b-on" /> Lunch</label>
+            <input type="time" class="b-start" step="300" value="12:00" aria-label="Lunch start" />
+            <select class="b-mins" aria-label="Lunch length"><option value="30" selected>30 min</option><option value="45">45 min</option><option value="60">60 min</option></select>
+          </div>
+          <div class="brk-row" data-k="b1">
+            <label class="toggle"><input type="checkbox" class="b-on" /> Break 2</label>
+            <input type="time" class="b-start" step="300" value="14:30" aria-label="Break 2 start" />
+            <select class="b-mins" aria-label="Break 2 length"><option value="10">10 min</option><option value="15" selected>15 min</option><option value="20">20 min</option><option value="30">30 min</option></select>
+          </div>
         </div>
       </div>
       <div class="dialog-foot">

@@ -37,7 +37,7 @@
     selected: null,
     ptoRegion: 'all',
     calFilter: 'all',
-    ptoFilter: 'all',
+    ptoFilter: 'pending',
     // Admin
     editingId: null,
     editColor: null,
@@ -233,6 +233,35 @@
       .sort((a, b) => a.from - b.from);
   }
 
+  // ---------- breaks & lunch ----------
+  // Each employee can have up to two breaks and a lunch, the same on every
+  // working day: { start: 'HH:MM', mins: 15 }. Shown on Home and counted as
+  // "not available" for coverage, like meetings.
+  function breakList(e) {
+    const out = [];
+    (e.breaks || []).forEach((b, i) => b && out.push({ kind: 'break', label: 'Break', n: i + 1, ...b }));
+    if (e.lunch) out.push({ kind: 'lunch', label: 'Lunch', ...e.lunch });
+    return out;
+  }
+  function breakSpans(e, shift) {
+    const s = toMin(shift.start), end = shiftEndMin(shift);
+    return breakList(e)
+      .map((b) => {
+        let bs = toMin(b.start);
+        if (bs < s && bs + 1440 < end) bs += 1440;
+        return { b, from: Math.max(bs, s), to: Math.min(bs + b.mins, end) };
+      })
+      .filter((x) => x.to > x.from)
+      .sort((a, b) => a.from - b.from);
+  }
+  // Everything that makes someone unavailable during their shift.
+  function busySpans(e, dateStr, shift) {
+    return [...meetingSpans(e, dateStr, shift), ...breakSpans(e, shift)];
+  }
+  function fmtBreak(b) {
+    return `${fmtTime(b.start)} – ${minToTime(toMin(b.start) + b.mins)}`;
+  }
+
   // ---------- coverage ----------
   // The hours the desk must be staffed, per weekday. Default: Mon–Fri 6 AM – 5 PM.
   function defaultCoverage() {
@@ -305,7 +334,7 @@
     if (!win || !S.employees.some((e) => regionOf(e) === region)) return [];
     const people = dayStatus(dateStr)
       .working.filter((w) => regionOf(w.e) === region)
-      .map((w) => ({ s: toMin(w.shift.start), e: shiftEndMin(w.shift), busy: meetingSpans(w.e, dateStr, w.shift) }));
+      .map((w) => ({ s: toMin(w.shift.start), e: shiftEndMin(w.shift), busy: busySpans(w.e, dateStr, w.shift) }));
     const STEP = 5;
     const gaps = [];
     for (let t = win.s; t < win.e; t += STEP) {
@@ -398,6 +427,20 @@
       color: COLOR_RE.test(body.color) ? body.color : COLORS[0],
       schedule: cleanSchedule(body.schedule),
       ...cleanInfo(body),
+      ...cleanBreaks(body),
+    };
+  }
+  function cleanBreaks(body) {
+    const one = (b, label, maxMins) => {
+      if (!b) return null;
+      if (!TIME_RE.test(b.start)) throw new Error(`${label}: please enter a start time`);
+      const mins = Number(b.mins);
+      if (!Number.isInteger(mins) || mins < 5 || mins > maxMins) throw new Error(`${label}: please choose a length`);
+      return { start: b.start, mins };
+    };
+    return {
+      breaks: [one(body.breaks?.[0], 'Break 1', 60), one(body.breaks?.[1], 'Break 2', 60)],
+      lunch: one(body.lunch, 'Lunch', 120),
     };
   }
   // Employee info (all optional). staffId/staffNumber are the company's own
@@ -897,7 +940,7 @@
 
     renderTimeline(working, isToday, win, gapMap);
     renderStartGroups(working);
-    renderTimeOff(onPto, pendingPto, off.filter((o) => !o.pending));
+    renderTimeOff(onPto, pendingPto, off.filter((o) => !o.pending), working);
   }
 
   function renderTimeline(working, isToday, win = null, gapMap = {}) {
@@ -948,15 +991,23 @@
             }\nClick to edit"><span class="mtg-name">${m.repeat && m.repeat !== 'none' ? '↻ ' : ''}${esc(m.title)}</span></div>`
         )
         .join('');
+      const brks = breakSpans(w.e, w.shift);
+      const brkBlocks = brks
+        .map(
+          ({ b, from, to }) =>
+            `<div class="brk ${b.kind}" style="left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="${b.label}: ${esc(fmtBreak(b))}">${to - from >= 40 ? `<span>${b.label}</span>` : ''}</div>`
+        )
+        .join('');
       const tip =
         `${w.e.name}: ${label}` +
+        brks.map(({ b }) => `\n${b.label}: ${fmtBreak(b)}`).join('') +
         (o ? ` (${w.shift.extra ? 'extra shift' : 'adjusted'}${o.note ? ': ' + o.note : ''})` : '') +
         (w.pending ? ' (PTO pending)' : '') +
         mtgs.map(({ m }) => `\nMeeting: ${m.title}, ${fmtTime(m.startTime)} – ${fmtTime(m.endTime)}`).join('') +
         `\nClick to ${S.admin ? 'add a meeting block or adjust hours' : 'add a meeting block'}`;
       return `<div class="tl-row">
         <div class="tl-who">${avatar(w.e, 'sm')}<div class="tl-names"><div class="tl-name">${esc(w.e.name)}</div><div class="tl-sub">${esc(o?.note || w.e.role || '')}</div></div></div>
-        <div class="tl-track"><div class="${cls}" data-emp="${w.e.id}" style="--c:${w.e.color};left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(tip)}"><span>${label}${o ? ` <em>${w.shift.extra ? 'extra shift' : 'adjusted'}</em>` : ''}</span>${blocks}</div></div>
+        <div class="tl-track"><div class="${cls}" data-emp="${w.e.id}" style="--c:${w.e.color};left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(tip)}"><span>${label}${o ? ` <em>${w.shift.extra ? 'extra shift' : 'adjusted'}</em>` : ''}</span>${brkBlocks}${blocks}</div></div>
       </div>`;
     };
     const byStart = (x, y) => toMin(x.shift.start) - toMin(y.shift.start) || x.e.name.localeCompare(y.e.name);
@@ -983,7 +1034,7 @@
 
     // Coverage: how many people are available during each hour. Someone counts
     // if any 15 minutes of that hour are on shift and not in a meeting.
-    const avail = working.map((w) => ({ s: toMin(w.shift.start), e: shiftEndMin(w.shift), busy: meetingSpans(w.e, S.homeDate, w.shift) }));
+    const avail = working.map((w) => ({ s: toMin(w.shift.start), e: shiftEndMin(w.shift), busy: busySpans(w.e, S.homeDate, w.shift) }));
     const cov = [];
     for (let h = a; h < b; h++) {
       let n = 0;
@@ -1044,28 +1095,91 @@
       .join('');
   }
 
-  function renderTimeOff(onPto, pendingPto, notScheduled) {
+  // ---------- Events panel ----------
+  // Build the day's events for the people shown: shift starts and ends,
+  // breaks, lunch and meetings. For today, things in progress are "now" and
+  // the rest are upcoming; past items drop off.
+  const EVENT_CAP = 10;
+  function dayEvents(working, dateStr, nowMin) {
+    const now = [], next = [];
+    for (const w of working) {
+      const s = toMin(w.shift.start), e = shiftEndMin(w.shift);
+      const name = firstName(w.e.name);
+      const add = (list, ev) => list.push({ e: w.e, ...ev });
+      if (nowMin < s) add(next, { t: s, kind: 'start', text: `${name}'s shift starts`, sub: `${fmtTime(w.shift.start)} – ${fmtTime(w.shift.end)}` });
+      const spans = [
+        ...breakSpans(w.e, w.shift).map((x) => ({ ...x, kind: x.b.kind, what: x.b.kind === 'lunch' ? 'lunch' : 'a break', label: x.b.kind === 'lunch' ? 'lunch' : 'break' })),
+        ...meetingSpans(w.e, dateStr, w.shift).map((x) => ({ ...x, kind: 'meeting', what: `a meeting: ${x.m.title}`, label: `a meeting: ${x.m.title}` })),
+      ];
+      for (const x of spans) {
+        if (x.from <= nowMin && nowMin < x.to) add(now, { t: x.from, until: x.to, kind: x.kind, text: `${name} is ${x.kind === 'meeting' ? 'in' : 'on'} ${x.label}` });
+        else if (nowMin < x.from) add(next, { t: x.from, until: x.to, kind: x.kind, text: `${name} has ${x.what}` });
+      }
+      if (nowMin < e) add(next, { t: e, kind: 'end', text: `${name}'s shift ends` });
+    }
+    now.sort((a, b) => a.until - b.until);
+    next.sort((a, b) => a.t - b.t || a.e.name.localeCompare(b.e.name));
+    return { now, next };
+  }
+  function relTime(mins) {
+    if (mins <= 0) return 'now';
+    if (mins < 60) return `in ${mins} min`;
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return `in ${h} hr${m ? ` ${m} min` : ''}`;
+  }
+
+  function renderTimeOff(onPto, pendingPto, notScheduled, working = []) {
     const section = (title, count, body) => `<div class="panel-sec"><h3><span>${title}</span><span>${count}</span></h3>${body}</div>`;
     const sub = (e, text) => `${S.region === 'all' ? regionTag(e) + ' ' : ''}${text}`;
-    let html = `<div class="card-head"><h2>Time off</h2><a class="btn ghost sm" href="#pto" data-request="${S.homeDate}">Request</a></div>`;
-    if (!S.employees.length) html += `<div class="empty">No team members yet.</div>`;
-    else {
-      html += section(
-        '🌴 On PTO',
-        onPto.length,
-        onPto.length
-          ? onPto.map((p) => personRow(p.e, `<span class="tag approved">Approved</span>`, sub(p.e, esc(fmtRange(p.req.start, p.req.end))))).join('')
-          : `<div class="empty">Nobody is on PTO.</div>`
-      );
-      if (pendingPto.length)
-        html += section('PTO pending approval', pendingPto.length, pendingPto.map((x) => personRow(x.e, `<span class="tag pending">Pending</span>`, sub(x.e, esc(fmtRange(x.pending.start, x.pending.end))))).join(''));
-      if (notScheduled.length)
-        html += section(
-          'Not scheduled',
-          notScheduled.length,
-          notScheduled.map((o) => personRow(o.e, S.admin ? `<button class="btn ghost xs" data-add-shift="${o.e.id}">Add shift</button>` : '', sub(o.e, 'Regular day off'))).join('')
-        );
+    const isToday = S.homeDate === ymd(new Date());
+    let html = `<div class="card-head"><h2>Events</h2>${isToday ? `<span class="live-dot" title="Updates automatically">Live</span>` : ''}</div>`;
+    if (!S.employees.length) {
+      $('#time-off').innerHTML = html + `<div class="empty">No team members yet.</div>`;
+      return;
     }
+
+    // 1. PTO always first.
+    const ptoRows = [
+      ...onPto.map((p) => personRow(p.e, `<span class="tag approved">PTO</span>`, sub(p.e, esc(fmtRange(p.req.start, p.req.end))))),
+      ...pendingPto.map((x) => personRow(x.e, `<span class="tag pending">Pending</span>`, sub(x.e, esc(fmtRange(x.pending.start, x.pending.end))))),
+    ];
+    const calIcon = `<svg class="sec-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>`;
+    const clockIcon = `<svg class="sec-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
+    html += section(`${calIcon}PTO`, ptoRows.length, ptoRows.length ? ptoRows.join('') : `<div class="empty">Nobody is on PTO ${isToday ? 'today' : 'this day'}.</div>`);
+
+    // 2. Live feed (today) or the day's schedule (other days), capped.
+    const d = new Date();
+    const nowMin = isToday ? d.getHours() * 60 + d.getMinutes() : -1;
+    const { now, next } = dayEvents(working, S.homeDate, nowMin);
+    const shownNow = now.slice(0, EVENT_CAP);
+    const shownNext = next.slice(0, EVENT_CAP - shownNow.length);
+    const evRow = (ev, right) => `<div class="ev ev-${ev.kind}">
+        ${avatar(ev.e, 'xs')}
+        <div class="ev-text">${esc(ev.text)}</div>
+        <div class="ev-when">${right}</div>
+      </div>`;
+    let feed = '';
+    if (shownNow.length)
+      feed += `<div class="ev-head">Now</div>` + shownNow.map((ev) => evRow(ev, `until ${minToTime(ev.until)}<small>${ev.until - nowMin} min left</small>`)).join('');
+    if (shownNext.length)
+      feed +=
+        (isToday ? `<div class="ev-head">Up next</div>` : '') +
+        shownNext.map((ev) => evRow(ev, isToday ? `${relTime(ev.t - nowMin)}<small>${minToTime(ev.t)}</small>` : minToTime(ev.t))).join('');
+    const total = now.length + next.length;
+    if (total > EVENT_CAP) feed += `<div class="ev-more">+${total - EVENT_CAP} more later</div>`;
+    html += section(
+      `${clockIcon}${isToday ? 'Today' : 'Schedule'}`,
+      '',
+      feed || `<div class="empty">${isToday && working.length ? 'Nothing else coming up today.' : 'Nobody scheduled.'}</div>`
+    );
+
+    // 3. People with the day off (admins can add a shift from here).
+    if (notScheduled.length)
+      html += section(
+        'Not scheduled',
+        notScheduled.length,
+        notScheduled.map((o) => personRow(o.e, S.admin ? `<button class="btn ghost xs" data-add-shift="${o.e.id}">Add shift</button>` : '', sub(o.e, 'Regular day off'))).join('')
+      );
     $('#time-off').innerHTML = html;
   }
 
@@ -1403,7 +1517,11 @@
         .map((g) => `<div class="sched-hours"><span class="sched-days">${dayLabel(g.pos)}</span>${fmtTime(g.start)} – ${fmtTime(g.end)}</div>`)
         .join('');
     }
-    return `<div class="tt-cell tt-sched" data-label="Schedule" style="--c:${e.color}"><div class="week-strip">${strip}</div>${hours}</div>`;
+    const bl = breakList(e).sort((a, b) => toMin(a.start) - toMin(b.start));
+    const brkLine = bl.length
+      ? `<div class="tt-sub">${bl.map((b) => `${b.label} ${fmtTime(b.start)}`).join(' · ')}</div>`
+      : '';
+    return `<div class="tt-cell tt-sched" data-label="Schedule" style="--c:${e.color}"><div class="week-strip">${strip}</div>${hours}${brkLine}</div>`;
   }
 
   // One row of the Admin → Team table. Each cell has a main line and a smaller
@@ -1462,7 +1580,9 @@
     const used = new Set(S.employees.map((x) => x.color));
     S.editColor = e ? e.color : COLORS.find((c) => !used.has(c)) || COLORS[0];
     renderSwatches();
-    loadEmpSchedule(e ? e.schedule : DAY_NAMES.map((_, i) => ({ on: i > 0 && i < 6, start: '08:00', end: '17:00' })));
+    const startSched = e ? e.schedule : DAY_NAMES.map((_, i) => ({ on: i > 0 && i < 6, start: '08:00', end: '17:00' }));
+    loadEmpSchedule(startSched);
+    loadBreaks(e, startSched);
     const el = f.elements;
     for (const k of ['staffId', 'staffNumber', 'email', 'phone', 'startDate']) el[k].value = e?.[k] || '';
     // Supervisor access: the PIN box starts empty; leaving it empty keeps the current PIN.
@@ -1481,6 +1601,35 @@
     $('#swatches').innerHTML = COLORS.map(
       (c) => `<button type="button" class="swatch ${c === S.editColor ? 'on' : ''}" style="--c:${c}" data-color="${c}" aria-label="Color ${c}"></button>`
     ).join('');
+  }
+
+  // ---------- breaks & lunch editor ----------
+  // Rows: b0 = Break 1, lunch, b1 = Break 2. Defaults are suggested from the
+  // shift: a break ~2 hours in, lunch around the middle, a break ~2 hours before the end.
+  function loadBreaks(e, sched) {
+    const base = sched.find((d) => d.on) || { start: '08:00', end: '17:00' };
+    const s = toMin(base.start), en = shiftEndMin(base);
+    const hhmm = (m) => minToHHMM(Math.round(m / 15) * 15);
+    const defaults = { b0: hhmm(s + 120), lunch: hhmm((s + en) / 2 - 15), b1: hhmm(en - 120) };
+    const cur = { b0: e?.breaks?.[0], lunch: e?.lunch, b1: e?.breaks?.[1] };
+    for (const row of $$('#brk-box .brk-row')) {
+      const k = row.dataset.k, v = cur[k];
+      $('.b-on', row).checked = !!v;
+      $('.b-start', row).value = v ? v.start : defaults[k];
+      $('.b-mins', row).value = String(v ? v.mins : k === 'lunch' ? 30 : 15);
+      row.classList.toggle('off', !v);
+    }
+  }
+  function readBreaks() {
+    const get = (k) => {
+      const row = $(`#brk-box .brk-row[data-k="${k}"]`);
+      return $('.b-on', row).checked ? { start: $('.b-start', row).value, mins: Number($('.b-mins', row).value) } : null;
+    };
+    return { breaks: [get('b0'), get('b1')], lunch: get('lunch') };
+  }
+  function minToHHMM(min) {
+    const v = ((min % 1440) + 1440) % 1440;
+    return `${String(Math.floor(v / 60)).padStart(2, '0')}:${String(v % 60).padStart(2, '0')}`;
   }
 
   // ---------- employee weekly schedule (two modes) ----------
@@ -2176,7 +2325,7 @@
         const el = f.elements;
         clean = cleanEmployee(
           {
-            name: el.name.value, role: el.role.value, region: el.region.value, color: S.editColor, schedule: readEmpSchedule(),
+            name: el.name.value, role: el.role.value, region: el.region.value, color: S.editColor, schedule: readEmpSchedule(), ...readBreaks(),
             staffId: el.staffId.value, staffNumber: el.staffNumber.value, email: el.email.value, phone: el.phone.value, startDate: el.startDate.value,
           },
           prev?.role
@@ -2219,6 +2368,11 @@
       );
       if (ok) $('#emp-dialog').close();
     };
+
+    // breaks & lunch rows dim when switched off
+    $('#brk-box').addEventListener('change', (ev) => {
+      if (ev.target.classList.contains('b-on')) ev.target.closest('.brk-row').classList.toggle('off', !ev.target.checked);
+    });
 
     // tidy phone numbers as you leave the field
     $('#emp-form').elements.phone.addEventListener('blur', (ev) => { ev.target.value = formatPhone(ev.target.value); });
@@ -2266,7 +2420,11 @@
     setInterval(poll, POLL_MS);
     window.addEventListener('focus', poll);
     // keep the "Now" line moving
-    setInterval(() => { if (S.data && currentTab() === 'home' && S.homeDate === ymd(new Date())) renderHome(); }, 60000);
+    // Keep the "Now" line and the Events feed current. Skips while a dialog or
+    // picker is open so nothing jumps under the user.
+    setInterval(() => {
+      if (S.data && currentTab() === 'home' && S.homeDate === ymd(new Date()) && !document.querySelector('dialog[open]') && !P.el && $('#bar-menu').hidden) renderHome();
+    }, 30000);
   }
 
   // ---------- time & date pickers ----------
