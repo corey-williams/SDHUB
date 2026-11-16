@@ -258,6 +258,10 @@
   function busySpans(e, dateStr, shift) {
     return [...meetingSpans(e, dateStr, shift), ...breakSpans(e, shift)];
   }
+  // Fork and knife, used for lunch on the shift bars and in the Events feed.
+  const LUNCH_ICON = `<svg class="lunch-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 2v6a3 3 0 0 0 6 0V2"/><path d="M8 2v20"/><path d="M19 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>`;
+  // Pause symbol, used for breaks on the shift bars.
+  const BREAK_ICON = `<svg class="lunch-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg>`;
   function fmtBreak(b) {
     return `${fmtTime(b.start)} – ${minToTime(toMin(b.start) + b.mins)}`;
   }
@@ -996,7 +1000,7 @@
       const brkBlocks = brks
         .map(
           ({ b, from, to }) =>
-            `<div class="brk ${b.kind}" style="left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="${b.label}: ${esc(fmtBreak(b))}">${to - from >= 40 ? `<span>${b.label}</span>` : ''}</div>`
+            `<div class="brk ${b.kind}" style="left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="${b.label}: ${esc(fmtBreak(b))}">${b.kind === 'lunch' ? LUNCH_ICON : BREAK_ICON}</div>`
         )
         .join('');
       const tip =

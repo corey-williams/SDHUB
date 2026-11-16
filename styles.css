@@ -177,7 +177,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .lg-pto { background: repeating-linear-gradient(135deg, var(--muted) 0 3px, #d7d9e6 3px 6px); }
 #view-pto .lg-pending { border-color: var(--muted); }
 .lg-pending { border: 1.5px dashed var(--warn); }
-.lg-brk { background: repeating-linear-gradient(135deg, #f1f2f6 0 2px, #b8bccb 2px 4px); }
+.lg-brk { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--accent) 26%, white) 0 2px, color-mix(in srgb, var(--accent) 60%, white) 2px 4px); }
 .lg-mtg { background: repeating-linear-gradient(135deg, #fff1d6 0 2px, #f59e0b 2px 4px); }
 
 .cal-head, .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
@@ -293,23 +293,27 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .mtg {
   position: absolute; top: 0; bottom: 0; z-index: 1; cursor: pointer;
   display: flex; align-items: center; padding: 0 5px; overflow: hidden; min-width: 0;
-  background: repeating-linear-gradient(135deg, #fff1d6 0 5px, #ffe2a8 5px 10px);
-  border-left: 1.5px solid #f59e0b; border-right: 1.5px solid #f59e0b;
-  color: #92400e; font-size: 11px; font-weight: 700; white-space: nowrap; text-overflow: ellipsis;
+  /* Same look as breaks: the employee's color in darker diagonal stripes. */
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 26%, white) 0 5px, color-mix(in srgb, var(--c) 42%, white) 5px 10px);
+  border-left: 1.5px solid color-mix(in srgb, var(--c) 60%, white); border-right: 1.5px solid color-mix(in srgb, var(--c) 60%, white);
+  color: color-mix(in srgb, var(--c) 75%, black); font-size: 11px; font-weight: 700; white-space: nowrap; text-overflow: ellipsis;
 }
 .mtg:hover { filter: brightness(.96); }
 .mtg-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
 .tl-bar > span { position: relative; z-index: 0; overflow: hidden; text-overflow: ellipsis; }
 /* Breaks and lunch inside a shift bar: grey stripes, distinct from amber meetings. */
+/* Breaks and lunch use the employee's own color (--c from the bar), in
+   slightly darker diagonal stripes than the bar so they stand out. */
 .brk {
   position: absolute; top: 0; bottom: 0; z-index: 1;
   display: flex; align-items: center; justify-content: center; overflow: hidden;
-  background: repeating-linear-gradient(135deg, #f1f2f6 0 5px, #dfe1ea 5px 10px);
-  border-left: 1.5px solid #b8bccb; border-right: 1.5px solid #b8bccb;
-  color: #4b5168; font-size: 10.5px; font-weight: 700; letter-spacing: .02em; white-space: nowrap;
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 26%, white) 0 5px, color-mix(in srgb, var(--c) 42%, white) 5px 10px);
+  border-left: 1.5px solid color-mix(in srgb, var(--c) 60%, white); border-right: 1.5px solid color-mix(in srgb, var(--c) 60%, white);
+  color: color-mix(in srgb, var(--c) 75%, black); font-size: 10.5px; font-weight: 700; letter-spacing: .02em; white-space: nowrap;
 }
-.brk.lunch { background: repeating-linear-gradient(135deg, #eef0f5 0 6px, #d7dae6 6px 12px); color: #3c4258; }
 .brk span { overflow: hidden; text-overflow: ellipsis; padding: 0 3px; }
+.brk .lunch-ico { width: 12px; height: 12px; flex: none; }
+.ev-text .lunch-ico { width: 13px; height: 13px; margin-right: 5px; vertical-align: -2px; color: var(--muted); }
 
 /* Breaks & lunch editor */
 .brk-box { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
