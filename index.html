@@ -207,13 +207,13 @@
           <div class="card cov-card">
             <div class="card-head">
               <h2>Coverage hours</h2>
-              <span class="muted small">When the desk must be staffed. Gaps show as alerts on Home.</span>
+              <span class="muted small">When each region must be staffed. Gaps show as alerts on Home.</span>
             </div>
             <div class="cov-grid">
               <form id="cov-form" class="admin-only" autocomplete="off">
-                <div class="sched" id="cov-editor"></div>
+                <div class="rc-list" id="cov-editor"></div>
                 <div class="cov-actions">
-                  <button class="btn ghost sm" type="button" id="cov-reset">Mon–Fri 6 AM – 5 PM</button>
+                  <span class="muted small">Same hours every selected day.</span>
                   <button class="btn primary sm" type="submit">Save coverage hours</button>
                 </div>
               </form>
@@ -241,7 +241,7 @@
               <div>
                 <span class="label">Regions</span>
                 <div id="region-toggles" class="region-toggles"></div>
-                <p class="muted small">A hidden region and its people are left off the Home and PTO tabs. They stay listed here in Admin, so nothing is lost.</p>
+                <p class="muted small"><b>Show:</b> a hidden region and its people are left off the Home and PTO tabs, but stay listed here in Admin. <b>Gap alerts:</b> each region is checked on its own against the coverage hours.</p>
               </div>
               <form id="pin-form" autocomplete="off">
                 <span class="label">Change admin PIN</span>
@@ -366,6 +366,17 @@
       <div class="row2">
         <label>Start time <input type="time" name="mtgStart" step="300" required /></label>
         <label>End time <input type="time" name="mtgEnd" step="300" required /></label>
+      </div>
+      <div class="row2">
+        <label><span class="lbl">Repeats</span><select name="mtgRepeat"></select></label>
+        <label id="mtg-until-wrap"><span class="lbl">Until <span class="muted small">(optional)</span></span><input type="date" name="mtgUntil" /></label>
+      </div>
+      <div class="mtg-scope" id="mtg-scope" hidden>
+        <span class="lbl">This is a repeating meeting. Changes and Delete apply to:</span>
+        <div class="seg" id="mtg-scope-seg">
+          <button type="button" data-scope="one" class="on">This day only</button>
+          <button type="button" data-scope="all">Every day in the series</button>
+        </div>
       </div>
       <div class="dialog-foot">
         <button type="button" class="btn ghost danger-text" id="mtg-delete" hidden>Delete</button>

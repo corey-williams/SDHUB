@@ -11,21 +11,23 @@ The service desk's team calendar, schedules and PTO.
   - each person's shift as a bar on a time graph, with a "Now" line and how many people are on shift each hour
   - start times grouped, for example "7 AM: Taylor, Morgan"
   - who's on PTO, who has PTO pending and who isn't scheduled
-  - **Meeting blocks (everyone):** click someone's bar and choose **Add meeting block**. Enter the meeting name and start and end times; the start time defaults to where you clicked. The meeting shows as a striped section on their bar with its name. Click a block to edit or delete it. "Available by hour" doesn't count someone for an hour they spend entirely in meetings.
+  - **Meeting blocks (everyone):** click someone's bar and choose **Add meeting block**. Enter the meeting name and start and end times; the start time defaults to where you clicked. The meeting shows as a striped section on their bar with its name. Click a block to edit or delete it.
+    - **Repeats:** a meeting can repeat every day, every week, every 2 weeks or every month (same date), with an optional **Until** date. Repeating blocks show **↻**. It only appears on days the person is working.
+    - When you edit or delete a repeating meeting, choose **This day only** (e.g. move or cancel one week's standup) or **Every day in the series**. "Available by hour" doesn't count someone for an hour they spend entirely in meetings.
   - **Adjusting hours (admins):** click someone's bar and choose **Adjust hours** to change their start and end time for that day or a date range, with an optional note. By default it only affects days they normally work; tick **Include their regular days off** to cover every day in the range. It never changes their weekly schedule. Adjusted bars are labeled "Adjusted".
   - **Adding a shift on a day off (admins):** people under "Not scheduled" have an **Add shift** button. Their bar then shows "Extra shift". Remove one from the same window or from Admin → Schedule adjustments.
 - **PTO**: a month calendar that shows only time off (approved and pending), filterable by region and person. Click a day to start a request for it. Below the calendar are the request form and the list of requests.
 - **Admin** (PIN): approve or deny PTO, and add, edit or remove employees. Each employee has a role (IT Support Technician Associate, IT Support Technician or IT Support Technician Senior), a region and a weekly schedule. The team list is grouped by region.
   - **Employee info:** each employee can have an Employee ID, an employee number (only if different), email, phone and start date. All are optional. Employee IDs must be unique, and 10-digit phone numbers are formatted automatically. The team list shows these under each name, with email and phone as clickable links and time with the company next to the start date.
   - **Supervisors:** in **Edit employee**, turn on **Supervisor** and type or **Generate** a PIN. Supervisors sign in on the Admin tab with that PIN.
-    - They can: approve, deny and reopen PTO; adjust hours and add shifts; see coverage alerts.
-    - They can't: manage employees, see or change any PIN, or change settings or coverage hours.
+    - They can: approve, deny and reopen PTO; adjust hours and add shifts; see coverage alerts; add, edit and remove employees, including employee info and schedules.
+    - They can't: turn supervisor access on or off, see or change any PIN, remove a supervisor, or change settings or coverage hours.
     - Only the admin can see a supervisor's PIN (**Show**) or reset it (type a new one). After a page reload, the admin is asked for the admin PIN again before a PIN is shown.
     - In `data.json` the PIN is only stored hashed and encrypted with the admin PIN, never as readable text. Changing the admin PIN re-encrypts all supervisor PINs automatically.
-  - **Coverage hours:** the hours the desk must be staffed for each weekday (default Mon–Fri 6 AM – 5 PM). Someone counts as covering when they're on shift and not in a meeting; people in hidden regions don't count. When there's a gap:
-    - Home shows a red **No coverage** banner (for example "6 AM – 7 AM (1 hr)") and shades the gap on the shift graph
-    - adjusting hours, approving PTO or adding a meeting that causes a gap shows a warning right away
-    - Admin lists all gaps in the next 14 days, each with a **View** button that opens that day
+  - **Coverage hours:** set **per region** as one start and end time plus the days it applies (default Mon–Fri 6 AM – 5 PM), e.g. Bellin 6 AM – 5 PM, Gundersen 7:30 AM – 6 PM. **Each region is checked on its own:** a region is covered only when one of its own people is on shift and not in a meeting. Turn checking on or off per region with the **Gap alerts** switches under Settings → Regions. Hidden regions and regions with nobody in them aren't checked. When a region has a gap:
+    - Home shows a red **No coverage** banner naming the region (for example "Gundersen 6 AM – 7:30 AM (1.5 hrs)") and shades the gap over that region's rows. On a single region's tab, only that region is shown.
+    - adjusting hours, approving PTO or adding a meeting that causes a gap in that person's region shows a warning right away
+    - Admin lists gaps for the next 14 days by day and region, each with a **View** button that opens that day
   - **Settings → Regions:** show or hide each region. Emplify starts hidden. A hidden region and everyone in it are left off the Home and PTO tabs, including "All regions". They still show in Admin, so nothing is lost when the region is turned back on.
 
 ## Files

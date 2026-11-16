@@ -311,6 +311,10 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 }
 .pop button:hover { background: var(--accent-soft); color: var(--accent); }
 .danger-text { color: var(--bad); }
+.mtg-scope { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); }
+.mtg-scope .lbl { font-size: 12.5px; font-weight: 600; color: var(--accent); }
+.mtg-scope .seg { align-self: flex-start; background: var(--surface); }
+#mtg-form select:disabled, #mtg-form input:disabled { opacity: .55; cursor: not-allowed; }
 .dialog-foot .spacer { flex: 1; }
 .mid-dialog { width: min(480px, calc(100vw - 32px)); }
 .mid-dialog p { margin: -6px 0 0; }
@@ -401,19 +405,38 @@ body.is-supervisor .admin-only { display: none !important; }
 .cov-banner.bad { padding: 14px 18px; background: var(--bad-soft); border: 1px solid #f8b4b4; color: #991b1b; font-size: 14px; }
 .cov-banner.bad b { margin-right: 4px; }
 .cov-banner.ok { display: inline-flex; padding: 6px 12px; background: var(--ok-soft); color: #047857; font-size: 12.5px; font-weight: 600; border-radius: 99px; }
+.cov-line { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.cov-line .rtag { background: #fff; }
+.cov-hours { font-size: 12px; opacity: .7; margin-left: 4px; }
 .cov-sub { display: block; font-size: 12px; opacity: .75; margin-top: 2px; }
+.tl-groupbox { position: relative; }
 .tl-gap {
-  position: absolute; top: 24px; bottom: 44px; pointer-events: none;
+  position: absolute; top: 0; bottom: 0; pointer-events: none;
   left: calc(var(--who) + (100% - var(--who)) * var(--x) / 100); width: calc((100% - var(--who)) * var(--w) / 100);
   background: repeating-linear-gradient(135deg, rgba(239, 68, 68, .16) 0 6px, rgba(239, 68, 68, .05) 6px 12px);
   border-left: 1.5px dashed rgba(239, 68, 68, .6); border-right: 1.5px dashed rgba(239, 68, 68, .6);
 }
-.tl-gap span { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 700; color: #b91c1c; white-space: nowrap; background: rgba(255,255,255,.85); padding: 0 4px; border-radius: 4px; }
+.tl-gap span { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 700; color: #b91c1c; white-space: nowrap; background: rgba(255,255,255,.85); padding: 0 4px; border-radius: 4px; }
 .cov-cell.zero { background: var(--bad-soft); color: var(--bad); }
 .toast.warn { background: #b45309; max-width: 420px; }
 .cov-card { grid-column: 1 / -1; }
 .cov-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; }
-.cov-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.cov-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; }
+.rc-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.rc-row { display: grid; grid-template-columns: 110px auto 1fr; align-items: center; gap: 14px; padding: 10px 12px; border-top: 1px solid var(--border); }
+.rc-row:first-child { border-top: 0; }
+.rc-name { display: flex; flex-direction: column; gap: 1px; font-weight: 650; position: relative; padding-left: 14px; }
+.rc-name i { position: absolute; left: 0; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.rc-name .muted { font-weight: 500; font-size: 11px; }
+.rc-times { display: flex; align-items: center; gap: 8px; }
+.rc-times input { width: 128px; min-height: 34px; padding: 4px 30px 4px 9px; background-position: right 8px center; }
+.rc-days { display: flex; gap: 4px; justify-content: flex-end; flex-wrap: wrap; }
+.rc-days button {
+  width: 28px; height: 28px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 700;
+  background: var(--surface); color: var(--muted); border: 1.5px solid var(--border);
+}
+.rc-days button:hover { border-color: var(--accent); color: var(--accent); }
+.rc-days button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .gap-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 0 4px var(--bad-soft); flex: none; margin: 0 6px; }
 .tl-group {
   display: flex; align-items: center; gap: 8px; margin: 14px 0 2px; padding-top: 10px; border-top: 1px solid var(--border);
@@ -482,10 +505,15 @@ body.is-supervisor .admin-only { display: none !important; }
 .settings-card { grid-column: 1 / -1; }
 .settings-grid { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 28px; }
 .settings-grid p { margin: 0; }
-.region-toggles { display: flex; flex-direction: column; gap: 8px; width: 100%; }
-.region-toggle { font-weight: 600; }
-.region-toggle i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
-.region-toggle .muted { margin-left: auto; font-weight: 500; }
+.region-toggles { display: flex; flex-direction: column; width: 100%; }
+.rt-row { display: grid; grid-template-columns: 1fr 56px 76px; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border); }
+.rt-row:first-child { border-top: 0; }
+.rt-head { padding-top: 0; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.rt-head span:not(:first-child), .rt-row .toggle { justify-self: center; }
+.rt-name { display: flex; align-items: center; gap: 8px; font-weight: 600; min-width: 0; }
+.rt-name i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
+.rt-name .muted { font-weight: 500; }
+.rt-row .toggle input:disabled { opacity: .4; cursor: not-allowed; }
 .team-group em { font-style: normal; font-size: 10.5px; font-weight: 650; letter-spacing: .03em; padding: 1px 6px; border-radius: 5px; background: var(--border); color: var(--muted); }
 .settings-grid > div, #pin-form { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 #pin-form .row2 { width: 100%; }
@@ -552,6 +580,8 @@ dialog form { padding: 22px; display: flex; flex-direction: column; gap: 16px; }
   .day-panel, .form-card { position: static; }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .settings-grid, .cov-grid { grid-template-columns: 1fr; }
+  .rc-row { grid-template-columns: 1fr; gap: 8px; }
+  .rc-days { justify-content: flex-start; }
 }
 @media (max-width: 720px) {
   .topbar { grid-template-columns: 1fr; justify-items: center; padding: 10px 14px; }

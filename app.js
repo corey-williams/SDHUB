@@ -183,12 +183,46 @@
     const o = overrideFor(e, dateStr, !base.on);
     return o ? { on: true, start: o.startTime, end: o.endTime, override: o, extra: !base.on } : base;
   }
+  // ---------- recurring meetings ----------
+  // A meeting starts on m.date and may repeat: 'daily', 'weekly', 'biweekly'
+  // or 'monthly' (same day of the month), optionally until m.until. Single
+  // cancelled days are listed in m.skip.
+  const REPEAT_KINDS = ['none', 'daily', 'weekly', 'biweekly', 'monthly'];
+  function ordinal(n) {
+    const s = ['th', 'st', 'nd', 'rd'], v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  }
+  function repeatLabel(kind, dateStr) {
+    const d = parseYmd(dateStr);
+    const wd = DAY_NAMES[d.getDay()];
+    return {
+      none: "Doesn't repeat",
+      daily: 'Every day',
+      weekly: `Every week on ${wd}`,
+      biweekly: `Every 2 weeks on ${wd}`,
+      monthly: `Every month on the ${ordinal(d.getDate())}`,
+    }[kind];
+  }
+  function occursOn(m, dateStr) {
+    if (dateStr < m.date) return false;
+    const kind = m.repeat || 'none';
+    if (kind === 'none') return dateStr === m.date;
+    if (m.until && dateStr > m.until) return false;
+    if ((m.skip || []).includes(dateStr)) return false;
+    const days = daysBetween(m.date, dateStr) - 1;
+    if (kind === 'daily') return true;
+    if (kind === 'weekly') return days % 7 === 0;
+    if (kind === 'biweekly') return days % 14 === 0;
+    if (kind === 'monthly') return parseYmd(dateStr).getDate() === parseYmd(m.date).getDate();
+    return false;
+  }
+
   // Meetings for one person on one day, as minute spans inside their shift
   // (handles shifts that run past midnight).
   function meetingSpans(e, dateStr, shift) {
     const s = toMin(shift.start), end = shiftEndMin(shift);
     return S.meetings
-      .filter((m) => m.employeeId === e.id && m.date === dateStr)
+      .filter((m) => m.employeeId === e.id && occursOn(m, dateStr))
       .map((m) => {
         let ms = toMin(m.startTime), me = toMin(m.endTime);
         if (ms < s && ms + 1440 < end) ms += 1440;
@@ -208,21 +242,69 @@
     if (!Array.isArray(c) || c.length !== 7) return defaultCoverage();
     return c.map((d) => ({ on: !!d?.on, start: TIME_RE.test(d?.start) ? d.start : '06:00', end: TIME_RE.test(d?.end) ? d.end : '17:00' }));
   }
-  function coverageWindow(dateStr) {
-    const c = S.data?.settings.coverage?.[parseYmd(dateStr).getDay()];
-    if (!c || !c.on) return null;
+  // Each region has its own coverage: one start/end time and the weekdays it
+  // applies. Older files only had one shared weekly schedule; that becomes
+  // every region's starting point.
+  function normRegionCoverage(rc, legacy) {
+    const on = legacy.filter((d) => d.on);
+    const fallback = {
+      start: on[0]?.start || '06:00',
+      end: on[0]?.end || '17:00',
+      days: legacy.map((d, i) => (d.on ? i : -1)).filter((i) => i >= 0),
+    };
+    if (!fallback.days.length) fallback.days = [1, 2, 3, 4, 5];
+    const out = {};
+    for (const r of REGIONS) {
+      const c = rc?.[r];
+      out[r] = c
+        ? {
+            start: TIME_RE.test(c.start) ? c.start : fallback.start,
+            end: TIME_RE.test(c.end) ? c.end : fallback.end,
+            days: Array.isArray(c.days) ? c.days.filter((d) => Number.isInteger(d) && d >= 0 && d < 7) : fallback.days,
+          }
+        : { ...fallback, days: [...fallback.days] };
+    }
+    return out;
+  }
+  function regionCoverage(region) {
+    return S.data?.settings.regionCoverage?.[region] || { start: '06:00', end: '17:00', days: [1, 2, 3, 4, 5] };
+  }
+  // The coverage window (in minutes) for a region on a date, or null if that
+  // region isn't covered that weekday.
+  function coverageWindow(dateStr, region) {
+    const c = regionCoverage(region);
+    if (!c.days.includes(parseYmd(dateStr).getDay())) return null;
     const s = toMin(c.start);
     let e = toMin(c.end);
     if (e <= s) e += 1440;
     return { s, e };
   }
-  // Stretches inside coverage hours where nobody (in a shown region) is on
-  // shift and out of meetings. Checked in 5-minute steps.
-  function coverageGaps(dateStr) {
-    const win = coverageWindow(dateStr);
-    if (!win || !S.employees.some(visibleEmp)) return [];
+  function fmtWindow(w) {
+    return `${minToTime(w.s)} – ${minToTime(w.e)}`;
+  }
+  // Coverage is checked per region: each region must have someone available
+  // on its own. A region is checked when it's shown, has gap alerts on, and
+  // has at least one person in it.
+  function alertsOn(r) {
+    return !(S.data?.settings.coverageOff || []).includes(r);
+  }
+  function checkedRegions() {
+    return REGIONS.filter((r) => !isHidden(r) && alertsOn(r) && S.employees.some((e) => regionOf(e) === r));
+  }
+  // Per-region gaps for a day: [{ region, win, gaps }] for every checked
+  // region whose coverage applies that weekday.
+  function regionGaps(dateStr) {
+    return checkedRegions()
+      .map((r) => ({ region: r, win: coverageWindow(dateStr, r), gaps: coverageGaps(dateStr, r) }))
+      .filter((x) => x.win);
+  }
+  // Stretches inside coverage hours where nobody in the region is on shift
+  // and out of meetings. Checked in 5-minute steps.
+  function coverageGaps(dateStr, region) {
+    const win = coverageWindow(dateStr, region);
+    if (!win || !S.employees.some((e) => regionOf(e) === region)) return [];
     const people = dayStatus(dateStr)
-      .working.filter((w) => visibleEmp(w.e))
+      .working.filter((w) => regionOf(w.e) === region)
       .map((w) => ({ s: toMin(w.shift.start), e: shiftEndMin(w.shift), busy: meetingSpans(w.e, dateStr, w.shift) }));
     const STEP = 5;
     const gaps = [];
@@ -241,13 +323,16 @@
     return `${minToTime(g.from)} – ${minToTime(g.to)} (${dur})`;
   }
   // After a change, warn if any day in the range now has a coverage gap.
-  function warnGaps(start, end) {
+  // Only the changed person's region is checked, so unrelated gaps elsewhere
+  // don't show up in the warning.
+  function warnGaps(start, end, onlyRegion = null) {
     const hits = [];
     for (let d = start; d <= end && hits.length < 4; d = addDays(d, 1)) {
-      const gaps = coverageGaps(d);
-      if (gaps.length) hits.push(`${fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric' })}: ${gaps.map(fmtGap).join(', ')}`);
+      for (const { region, gaps } of regionGaps(d).filter((x) => !onlyRegion || x.region === onlyRegion)) {
+        if (gaps.length) hits.push(`${region}, ${fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric' })}: ${gaps.map(fmtGap).join(', ')}`);
+      }
     }
-    if (hits.length) toast(`Heads up, no coverage on ${hits.join('; ')}`, 'warn');
+    if (hits.length) toast(`Heads up, no coverage in ${hits.slice(0, 4).join('; ')}`, 'warn');
   }
 
   // Typical hours to suggest when adding a shift on a day off.
@@ -364,7 +449,9 @@
       settings: {
         adminPinHash: d.settings?.adminPinHash || null,
         hiddenRegions: Array.isArray(d.settings?.hiddenRegions) ? d.settings.hiddenRegions.filter((r) => REGIONS.includes(r)) : [],
+        coverageOff: Array.isArray(d.settings?.coverageOff) ? d.settings.coverageOff.filter((r) => REGIONS.includes(r)) : [],
         coverage: normCoverage(d.settings?.coverage),
+        regionCoverage: normRegionCoverage(d.settings?.regionCoverage, normCoverage(d.settings?.coverage)),
         keySalt: d.settings?.keySalt || null,
       },
       employees: Array.isArray(d.employees) ? d.employees : [],
@@ -390,7 +477,7 @@
         ]
       : [];
     // Emplify starts hidden; an admin can show it under Admin → Settings.
-    return { version: 1, settings: { adminPinHash: await sha256(DEFAULT_PIN), hiddenRegions: ['Emplify'], coverage: defaultCoverage() }, employees, pto: [], overrides: [], meetings: [], updatedAt: new Date().toISOString() };
+    return { version: 1, settings: { adminPinHash: await sha256(DEFAULT_PIN), hiddenRegions: ['Emplify'], coverage: defaultCoverage(), regionCoverage: normRegionCoverage(null, defaultCoverage()) }, employees, pto: [], overrides: [], meetings: [], updatedAt: new Date().toISOString() };
   }
 
   // ---------- remembered folder (IndexedDB) ----------
@@ -778,30 +865,42 @@
       .map(([v, l, c]) => `<div class="card stat ${c}"><div class="stat-v">${esc(v)}</div><div class="stat-l">${l}</div></div>`)
       .join('');
 
-    // Team-wide coverage check for this day (all shown regions together).
-    const win = coverageWindow(ds);
-    const gaps = coverageGaps(ds);
+    // Coverage check per region: "All regions" shows every checked region,
+    // a single region's tab shows just that region.
+    const checks = regionGaps(ds).filter((x) => S.region === 'all' || x.region === S.region);
+    const gapMap = Object.fromEntries(checks.map((x) => [x.region, x.gaps]));
+    const bad = checks.filter((x) => x.gaps.length);
+    const okRegions = checks.filter((x) => !x.gaps.length);
+    // The graph's time range covers every shown region's coverage window.
+    const win = checks.length ? { s: Math.min(...checks.map((x) => x.win.s)), e: Math.max(...checks.map((x) => x.win.e)) } : null;
+    const tag = (r) => `<span class="rtag" style="--c:${REGION_COLORS[r]}">${esc(r)}</span>`;
     const cb = $('#coverage-banner');
-    if (!win || !S.employees.some(visibleEmp)) {
+    if (!checks.length) {
       cb.hidden = true;
-    } else if (gaps.length) {
+    } else if (bad.length) {
       cb.hidden = false;
       cb.className = 'cov-banner bad';
       cb.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></svg>
-        <div><b>No coverage</b> ${gaps.map((g) => esc(fmtGap(g))).join(', ')}<span class="cov-sub">Coverage hours ${minToTime(win.s)} – ${minToTime(win.e)} · all regions</span></div>`;
+        <div>
+          <b>No coverage</b>
+          ${bad
+            .map((x) => `<div class="cov-line">${tag(x.region)} ${x.gaps.map((g) => esc(fmtGap(g))).join(', ')}<span class="cov-hours">covers ${fmtWindow(x.win)}</span></div>`)
+            .join('')}
+          ${okRegions.length ? `<span class="cov-sub">${okRegions.map((x) => `${esc(x.region)} fully covered (${fmtWindow(x.win)})`).join(' · ')}</span>` : ''}
+        </div>`;
     } else {
       cb.hidden = false;
       cb.className = 'cov-banner ok';
       cb.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12l5 5L20 7"/></svg>
-        <div>Full coverage ${minToTime(win.s)} – ${minToTime(win.e)}</div>`;
+        <div>Full coverage · ${checks.map((x) => `${esc(x.region)} ${fmtWindow(x.win)}`).join(' · ')}</div>`;
     }
 
-    renderTimeline(working, isToday, win, S.region === 'all' ? gaps : []);
+    renderTimeline(working, isToday, win, gapMap);
     renderStartGroups(working);
     renderTimeOff(onPto, pendingPto, off.filter((o) => !o.pending));
   }
 
-  function renderTimeline(working, isToday, win = null, gaps = []) {
+  function renderTimeline(working, isToday, win = null, gapMap = {}) {
     const el = $('#timeline');
     const where = S.region === 'all' ? '' : ` in ${esc(regionLabel(S.region))}`;
     if (!S.employees.length) {
@@ -844,7 +943,9 @@
       const blocks = mtgs
         .map(
           ({ m, from, to }) =>
-            `<div class="mtg" data-mtg="${m.id}" style="left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="${esc(m.title)}: ${fmtTime(m.startTime)} – ${fmtTime(m.endTime)}\nClick to edit"><span class="mtg-name">${esc(m.title)}</span></div>`
+            `<div class="mtg" data-mtg="${m.id}" style="left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="${esc(m.title)}: ${fmtTime(m.startTime)} – ${fmtTime(m.endTime)}${
+              m.repeat && m.repeat !== 'none' ? `\n${esc(repeatLabel(m.repeat, m.date))}${m.until ? ` until ${esc(fmtDate(m.until))}` : ''}` : ''
+            }\nClick to edit"><span class="mtg-name">${m.repeat && m.repeat !== 'none' ? '↻ ' : ''}${esc(m.title)}</span></div>`
         )
         .join('');
       const tip =
@@ -860,16 +961,24 @@
     };
     const byStart = (x, y) => toMin(x.shift.start) - toMin(y.shift.start) || x.e.name.localeCompare(y.e.name);
 
+    // Red shading for a region's coverage gaps, drawn over just that region's rows.
+    const gapEls = (gaps = []) =>
+      gaps.map((g) => `<div class="tl-gap" style="--x:${pct(g.from)};--w:${pct(g.to) - pct(g.from)}" title="No coverage ${esc(fmtGap(g))}"><span>No coverage</span></div>`).join('');
+
     let body = '';
     if (S.region === 'all') {
       for (const r of regionGroups()) {
         const list = working.filter((w) => regionOf(w.e) === r).sort(byStart);
-        if (!list.length) continue;
-        body += `<div class="tl-group"><i style="--c:${REGION_COLORS[r]}"></i>${esc(regionLabel(r))}<span>${list.length} working</span></div>`;
-        body += list.map(row).join('');
+        const gaps = gapMap[r] || [];
+        if (!list.length && !gaps.length) continue;
+        body += `<div class="tl-group"><i style="--c:${REGION_COLORS[r]}"></i>${esc(regionLabel(r))}<span>${list.length} working</span></div>
+        <div class="tl-groupbox">
+          ${list.length ? list.map(row).join('') : `<div class="tl-row"><div class="tl-who"><span class="muted small">Nobody scheduled</span></div><div class="tl-track"></div></div>`}
+          ${gapEls(gaps)}
+        </div>`;
       }
     } else {
-      body = [...working].sort(byStart).map(row).join('');
+      body = `<div class="tl-groupbox">${[...working].sort(byStart).map(row).join('')}${gapEls(gapMap[S.region])}</div>`;
     }
 
     // Coverage: how many people are available during each hour. Someone counts
@@ -896,10 +1005,6 @@
         return `<span class="cov-cell ${zero ? 'zero' : ''}" style="--a:${n ? 0.15 + 0.85 * (n / peak) : 0}" title="${hourLabel(a + i)}: ${n} available">${n || (zero ? '0' : '')}</span>`;
       })
       .join('');
-    const gapEls = gaps
-      .map((g) => `<div class="tl-gap" style="--x:${pct(g.from)};--w:${pct(g.to) - pct(g.from)}" title="No coverage ${esc(fmtGap(g))}"><span>No coverage</span></div>`)
-      .join('');
-
     let now = '';
     if (isToday) {
       const d = new Date();
@@ -911,7 +1016,6 @@
       <div class="tl-row tl-axis"><div class="tl-who"></div><div class="tl-track">${ticks.join('')}</div></div>
       ${body}
       <div class="tl-row tl-cov"><div class="tl-who"><span class="muted small">Available by hour</span></div><div class="tl-track cov">${covCells}</div></div>
-      ${gapEls}
       ${now}
     </div>`;
   }
@@ -1166,27 +1270,33 @@
     $('#folder-name').textContent = `${S.dir?.name || ''}/${DATA_FILE}`;
 
     // Coverage hours editor (left alone while someone is editing it).
-    if (!S.covDirty) renderSchedEditor(S.data.settings.coverage, '#cov-editor');
+    if (!S.covDirty) renderCoverageEditor();
+    // One entry per day that has a gap, listing each affected region.
     const alerts = [];
     for (let i = 0; i < 14; i++) {
       const d = addDays(today, i);
-      const gaps = coverageGaps(d);
-      if (gaps.length) alerts.push({ d, gaps });
+      const bad = regionGaps(d).filter((x) => x.gaps.length);
+      if (bad.length) alerts.push({ d, bad });
     }
-    $('#cov-alerts').innerHTML = alerts.length
+    const checked = checkedRegions();
+    $('#cov-alerts').innerHTML = !checked.length
+      ? `<div class="empty-big">Gap alerts are off for every region. Turn them on under Settings → Regions.</div>`
+      : alerts.length
       ? alerts
           .map(
-            ({ d, gaps }) => `<div class="req">
+            ({ d, bad }) => `<div class="req">
               <span class="gap-dot"></span>
               <div class="req-main">
                 <div class="req-title">${fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric' })}${d === today ? ' <span class="tag pending">Today</span>' : ''}</div>
-                <div class="req-meta">No coverage ${gaps.map((g) => esc(fmtGap(g))).join(', ')}</div>
+                ${bad
+                  .map((x) => `<div class="req-meta"><span class="rtag" style="--c:${REGION_COLORS[x.region]}">${esc(x.region)}</span> No coverage ${x.gaps.map((g) => esc(fmtGap(g))).join(', ')}</div>`)
+                  .join('')}
               </div>
-              <button class="btn ghost xs" data-goto-day="${d}">View</button>
+              <button class="btn ghost xs" data-goto-day="${d}" data-goto-region="${bad.length === 1 ? esc(bad[0].region) : 'all'}">View</button>
             </div>`
           )
           .join('')
-      : `<div class="empty-big">No coverage gaps in the next 14 days ✓</div>`;
+      : `<div class="empty-big">No coverage gaps in the next 14 days ✓<br><span class="small">Checking ${esc(checked.join(', '))}</span></div>`;
 
     const adjs = S.overrides
       .filter((o) => o.end >= today && emp(o.employeeId))
@@ -1204,14 +1314,53 @@
           .join('')
       : `<div class="empty-big">No current or upcoming adjustments.</div>`;
 
-    $('#region-toggles').innerHTML = REGIONS.map((r) => {
-      const n = S.employees.filter((e) => regionOf(e) === r).length;
-      return `<label class="toggle region-toggle">
-        <input type="checkbox" data-region-toggle="${esc(r)}" ${isHidden(r) ? '' : 'checked'} />
-        <i style="--c:${REGION_COLORS[r]}"></i>${esc(r)}
-        <span class="muted small">${isHidden(r) ? 'Hidden' : 'Shown'} · ${n} ${n === 1 ? 'person' : 'people'}</span>
-      </label>`;
-    }).join('');
+    // Regions table: show/hide, and per-region coverage gap alerts.
+    $('#region-toggles').innerHTML =
+      `<div class="rt-row rt-head"><span>Region</span><span>Show</span><span>Gap alerts</span></div>` +
+      REGIONS.map((r) => {
+        const n = S.employees.filter((e) => regionOf(e) === r).length;
+        const hidden = isHidden(r);
+        return `<div class="rt-row">
+          <span class="rt-name"><i style="--c:${REGION_COLORS[r]}"></i>${esc(r)}<span class="muted small">${n} ${n === 1 ? 'person' : 'people'}</span></span>
+          <label class="toggle"><input type="checkbox" data-region-toggle="${esc(r)}" ${hidden ? '' : 'checked'} aria-label="Show ${esc(r)}" /></label>
+          <label class="toggle" title="${hidden ? 'Hidden regions are not checked' : ''}"><input type="checkbox" data-cov-toggle="${esc(r)}" ${alertsOn(r) ? 'checked' : ''} ${hidden ? 'disabled' : ''} aria-label="Gap alerts for ${esc(r)}" /></label>
+        </div>`;
+      }).join('');
+  }
+
+  // Admin → Coverage hours: one row per shown region with a start/end time
+  // and the weekdays it applies.
+  function renderCoverageEditor() {
+    const order = [1, 2, 3, 4, 5, 6, 0];
+    $('#cov-editor').innerHTML = REGIONS.filter((r) => !isHidden(r))
+      .map((r) => {
+        const c = regionCoverage(r);
+        const off = !alertsOn(r);
+        return `<div class="rc-row" data-region="${esc(r)}">
+          <div class="rc-name"><i style="--c:${REGION_COLORS[r]}"></i>${esc(r)}${off ? '<span class="muted small">alerts off</span>' : ''}</div>
+          <div class="rc-times">
+            <input type="time" class="rc-start" value="${c.start}" step="900" aria-label="${esc(r)} coverage start" />
+            <span class="muted">to</span>
+            <input type="time" class="rc-end" value="${c.end}" step="900" aria-label="${esc(r)} coverage end" />
+          </div>
+          <div class="rc-days">${order
+            .map((i) => `<button type="button" data-dow="${i}" class="${c.days.includes(i) ? 'on' : ''}" title="${DAY_NAMES[i]}">${DAY_SHORT[i][0]}</button>`)
+            .join('')}</div>
+        </div>`;
+      })
+      .join('');
+  }
+  function readCoverageEditor() {
+    const out = {};
+    for (const row of $$('#cov-editor .rc-row')) {
+      const r = row.dataset.region;
+      const start = $('.rc-start', row).value;
+      const end = $('.rc-end', row).value;
+      if (!TIME_RE.test(start) || !TIME_RE.test(end)) throw new Error(`${r}: please enter a start and end time`);
+      if (start === end) throw new Error(`${r}: start and end times can't match`);
+      out[r] = { start, end, days: $$('.rc-days .on', row).map((b) => Number(b.dataset.dow)).sort() };
+    }
+    return out;
   }
 
   // Schedule cell: a Mon–Sun strip of the days worked, then the hours. Days
@@ -1465,9 +1614,37 @@
     f.mtgName.value = m ? m.title : '';
     f.mtgStart.value = m ? m.startTime : hhmm(start);
     f.mtgEnd.value = m ? m.endTime : hhmm(Math.min(start + 60, shiftEndMin(shift)));
+    // Repeat options are worded from the series' first day (or this day for a new one).
+    const seriesStart = m ? m.date : dateStr;
+    f.mtgRepeat.innerHTML = REPEAT_KINDS.map((k) => `<option value="${k}">${esc(repeatLabel(k, seriesStart))}</option>`).join('');
+    f.mtgRepeat.value = m?.repeat || 'none';
+    f.mtgUntil.value = m?.until || '';
+    f.mtgUntil.min = seriesStart;
+    const recurring = !!m && (m.repeat || 'none') !== 'none';
+    $('#mtg-scope').hidden = !recurring;
+    setMtgScope('one');
+    updateMtgRepeatUI();
     $('#mtg-delete').hidden = !m;
     $('#mtg-dialog').showModal();
     f.mtgName.focus();
+  }
+  function updateMtgRepeatUI() {
+    $('#mtg-until-wrap').style.visibility = $('#mtg-form').elements.mtgRepeat.value === 'none' ? 'hidden' : 'visible';
+  }
+  // "This day only" vs "Every day in the series" when editing a repeating meeting.
+  function setMtgScope(scope) {
+    S.mtgScope = scope;
+    $$('#mtg-scope-seg [data-scope]').forEach((b) => b.classList.toggle('on', b.dataset.scope === scope));
+    const f = $('#mtg-form').elements;
+    const m = S.mtg?.id && S.meetings.find((x) => x.id === S.mtg.id);
+    // A single day can't change how the series repeats.
+    const lock = !!m && (m.repeat || 'none') !== 'none' && scope === 'one';
+    f.mtgRepeat.disabled = lock;
+    f.mtgUntil.disabled = lock;
+    if (lock) {
+      f.mtgRepeat.value = m.repeat;
+      f.mtgUntil.value = m.until || '';
+    }
   }
 
   // ---------- adjust hours (overrides) ----------
@@ -1531,7 +1708,7 @@
       p.decidedAt = status === 'pending' ? null : new Date().toISOString();
     }, msg);
     const p = S.pto.find((x) => x.id === id);
-    if (ok && status === 'approved' && p) warnGaps(p.start, p.end);
+    if (ok && status === 'approved' && p) warnGaps(p.start, p.end, regionOf(emp(p.employeeId) || {}));
     return ok;
   };
 
@@ -1639,28 +1816,54 @@
         const inside = meetingSpans(e, date, shift).length > 0;
         S.meetings = saved;
         if (!inside) throw new Error(`That's outside ${firstName(e.name)}'s hours (${fmtTime(shift.start)} – ${fmtTime(shift.end)})`);
-        clean = { title, startTime, endTime };
+        const repeat = REPEAT_KINDS.includes(f.mtgRepeat.value) ? f.mtgRepeat.value : 'none';
+        const until = repeat === 'none' ? '' : f.mtgUntil.value;
+        const series = id ? S.meetings.find((x) => x.id === id) : null;
+        if (until && until < (series ? series.date : date)) throw new Error('"Until" is before the meeting starts');
+        clean = { title, startTime, endTime, repeat, until };
       } catch (e) {
         return toast(e.message, true);
       }
+      const series = id ? S.meetings.find((x) => x.id === id) : null;
+      const recurring = !!series && (series.repeat || 'none') !== 'none';
+      const oneDay = recurring && S.mtgScope === 'one';
       const ok = await mutate((d) => {
         findIn(d.employees, empId, 'employee');
-        if (id) Object.assign(findIn(d.meetings, id, 'meeting'), clean);
-        else d.meetings.push({ id: uid(), employeeId: empId, date, ...clean, createdAt: new Date().toISOString() });
-      }, id ? 'Meeting updated' : 'Meeting block added');
+        if (!id) {
+          d.meetings.push({ id: uid(), employeeId: empId, date, ...clean, createdAt: new Date().toISOString() });
+        } else if (oneDay) {
+          // Change just this day: skip it in the series and add a one-off copy.
+          const s = findIn(d.meetings, id, 'meeting');
+          s.skip = [...new Set([...(s.skip || []), date])];
+          d.meetings.push({ id: uid(), employeeId: empId, date, ...clean, repeat: 'none', until: '', createdAt: new Date().toISOString() });
+        } else {
+          Object.assign(findIn(d.meetings, id, 'meeting'), clean); // whole series keeps its first day
+        }
+      }, !id ? (clean.repeat !== 'none' ? 'Repeating meeting added' : 'Meeting block added') : oneDay ? 'Meeting updated for this day' : 'Meeting updated');
       if (ok) {
         $('#mtg-dialog').close();
-        warnGaps(date, date);
+        // For repeating meetings, check the next two weeks of occurrences.
+        const horizon = clean.repeat !== 'none' && !oneDay ? addDays(date, 13) : date;
+        warnGaps(date, clean.until && clean.until < horizon ? clean.until : horizon, regionOf(emp(empId) || {}));
       }
     };
     $('#mtg-delete').onclick = async () => {
       const id = S.mtg?.id;
       if (!id) return;
+      const series = S.meetings.find((x) => x.id === id);
+      const oneDay = !!series && (series.repeat || 'none') !== 'none' && S.mtgScope === 'one';
+      const date = S.mtg.date;
       const ok = await mutate((d) => {
-        findIn(d.meetings, id, 'meeting');
-        d.meetings = d.meetings.filter((m) => m.id !== id);
-      }, 'Meeting block removed');
+        const s = findIn(d.meetings, id, 'meeting');
+        if (oneDay) s.skip = [...new Set([...(s.skip || []), date])];
+        else d.meetings = d.meetings.filter((m) => m.id !== id);
+      }, oneDay ? 'Meeting removed for this day' : series?.repeat && series.repeat !== 'none' ? 'Repeating meeting deleted' : 'Meeting block removed');
       if (ok) $('#mtg-dialog').close();
+    };
+    $('#mtg-form').elements.mtgRepeat.addEventListener('change', updateMtgRepeatUI);
+    $('#mtg-scope-seg').onclick = (ev) => {
+      const b = ev.target.closest('[data-scope]');
+      if (b) setMtgScope(b.dataset.scope);
     };
     $$('#ovr-dialog [data-close]').forEach((b) => (b.onclick = () => $('#ovr-dialog').close()));
     $('#ovr-form').allDays.addEventListener('change', updateOvrHint);
@@ -1686,7 +1889,7 @@
       }, 'Hours adjusted');
       if (ok) {
         $('#ovr-dialog').close();
-        warnGaps(clean.start, clean.end);
+        warnGaps(clean.start, clean.end, regionOf(emp(empId) || {}));
       }
     };
     $('#ovr-remove').onclick = async () => {
@@ -1777,6 +1980,11 @@
       if (t.dataset.addShift) openOverrideDialog(t.dataset.addShift, S.homeDate);
       if (t.dataset.gotoDay) {
         S.homeDate = t.dataset.gotoDay;
+        // Open Home on the affected region (or All regions if several have gaps).
+        if (t.dataset.gotoRegion) {
+          S.region = t.dataset.gotoRegion;
+          localStorage.setItem('sdh-region', S.region);
+        }
         location.hash = '#home';
         renderHome();
         window.scrollTo(0, 0);
@@ -1839,28 +2047,43 @@
     };
 
     // coverage hours
-    $('#cov-editor').addEventListener('change', (ev) => {
+    $('#cov-editor').addEventListener('change', () => (S.covDirty = true));
+    $('#cov-editor').addEventListener('click', (ev) => {
+      const b = ev.target.closest('.rc-days [data-dow]');
+      if (!b) return;
+      b.classList.toggle('on');
       S.covDirty = true;
-      if (ev.target.type === 'checkbox') ev.target.closest('.sched-row').classList.toggle('off', !ev.target.checked);
     });
-    $('#cov-editor').addEventListener('input', () => (S.covDirty = true));
-    $('#cov-reset').onclick = () => {
-      S.covDirty = true;
-      renderSchedEditor(defaultCoverage(), '#cov-editor');
-    };
     $('#cov-form').onsubmit = async (ev) => {
       ev.preventDefault();
-      let cov;
+      let rc;
       try {
-        cov = cleanSchedule(readSchedEditor('#cov-editor'));
+        rc = readCoverageEditor();
       } catch (e) {
         return toast(e.message, true);
       }
       S.covDirty = false;
-      if (!(await mutate((d) => { d.settings.coverage = cov; }, 'Coverage hours saved'))) S.covDirty = true;
+      const ok = await mutate((d) => {
+        d.settings.regionCoverage = { ...(d.settings.regionCoverage || {}), ...rc };
+      }, 'Coverage hours saved');
+      if (!ok) S.covDirty = true;
     };
 
     // show / hide regions
+    // per-region coverage gap alerts on/off
+    $('#region-toggles').addEventListener('change', (ev) => {
+      const r = ev.target.dataset.covToggle;
+      if (!r) return;
+      const on = ev.target.checked;
+      mutate((d) => {
+        const off = new Set(d.settings.coverageOff || []);
+        if (on) off.delete(r);
+        else off.add(r);
+        d.settings.coverageOff = REGIONS.filter((x) => off.has(x));
+      }, `Gap alerts ${on ? 'on' : 'off'} for ${r}`).then((ok) => {
+        if (!ok) ev.target.checked = !on;
+      });
+    });
     $('#region-toggles').addEventListener('change', (ev) => {
       const r = ev.target.dataset.regionToggle;
       if (!r) return;
