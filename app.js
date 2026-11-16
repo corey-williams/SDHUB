@@ -1147,7 +1147,7 @@
         <span>Employee</span><span>Schedule</span><span>Employee ID</span><span>Contact</span><span>Start date</span><span></span>
       </div>`;
       $('#team-list').innerHTML =
-        `<div class="team-table ${isAdmin() ? '' : 'no-actions'}">` +
+        `<div class="team-table ${S.admin ? '' : 'no-actions'}">` +
         header +
         regionGroups()
           .map((r) => {
@@ -1282,7 +1282,13 @@
         return mail ? cell('Contact', mail, tel) : cell('Contact', tel);
       })()}
       ${cell('Start date', e.startDate ? esc(fmtDate(e.startDate, { month: 'short', day: 'numeric', year: 'numeric' })) : '', esc(t))}
-      <div class="tt-actions">${isAdmin() ? `<button class="btn ghost xs" data-edit="${e.id}">Edit</button><button class="btn ghost xs" data-del-emp="${e.id}">Remove</button>` : ''}</div>
+      <div class="tt-actions">${
+        // Admins and supervisors can edit; only the admin can remove a supervisor.
+        S.admin
+          ? `<button class="btn ghost xs" data-edit="${e.id}">Edit</button>` +
+            (isAdmin() || !e.supervisor ? `<button class="btn ghost xs" data-del-emp="${e.id}">Remove</button>` : '')
+          : ''
+      }</div>
     </div>`;
   }
 
@@ -1370,13 +1376,16 @@
     const uniform = on.every((d) => d.start === on[0].start && d.end === on[0].end);
     fillSimpleSchedule(sched);
     renderSchedEditor(sched);
+    S.simpleDirty = uniform; // a uniform schedule can be rebuilt from "Same hours" safely
     showSchedMode(uniform ? 'simple' : 'advanced');
   }
   // Switching carries the current choices across.
   function setSchedMode(mode) {
     if (mode === S.schedMode) return;
     if (mode === 'advanced') {
-      renderSchedEditor(readSimpleSchedule());
+      // Only rebuild the per-day rows if something was changed in "Same hours";
+      // otherwise flipping back and forth keeps each day's own hours.
+      if (S.simpleDirty) renderSchedEditor(readSimpleSchedule());
     } else {
       const sched = readSchedEditor();
       const on = sched.filter((d) => d.on);
@@ -1386,6 +1395,7 @@
       }
       fillSimpleSchedule(sched);
     }
+    S.simpleDirty = false;
     showSchedMode(mode);
   }
   function readEmpSchedule() {
@@ -1776,6 +1786,7 @@
       if (t.dataset.edit) openEmployeeDialog(emp(t.dataset.edit));
       if (t.dataset.delEmp) {
         const e = emp(t.dataset.delEmp);
+        if (e?.supervisor && !isAdmin()) return toast('Only the admin can remove a supervisor', true);
         if (e && (await confirmBox(`Remove ${e.name}?`, 'Their schedule and all of their PTO requests will be removed from the shared file.', 'Remove')))
           mutate((d) => {
             d.employees = d.employees.filter((x) => x.id !== e.id);
@@ -1921,11 +1932,15 @@
     };
     $('#ss-days').onclick = (ev) => {
       const b = ev.target.closest('[data-dow]');
-      if (b) b.classList.toggle('on');
+      if (!b) return;
+      b.classList.toggle('on');
+      S.simpleDirty = true;
     };
+    $('#sched-simple').addEventListener('change', () => (S.simpleDirty = true));
     $('.ss-quick').onclick = (ev) => {
       const b = ev.target.closest('[data-days]');
       if (!b) return;
+      S.simpleDirty = true;
       const want = new Set(b.dataset.days.split(','));
       $$('#ss-days [data-dow]').forEach((d) => d.classList.toggle('on', want.has(d.dataset.dow)));
     };
@@ -1950,8 +1965,10 @@
       }
       const editing = S.editingId;
       const prev = editing ? emp(editing) : null;
-      const isSup = f.elements.supervisor.checked;
-      const newPin = f.elements.supPin.value.trim();
+      // Supervisors can edit employees but never supervisor access or PINs:
+      // for them, whatever the person already had is kept as-is.
+      const isSup = isAdmin() ? f.elements.supervisor.checked : !!prev?.supervisor;
+      const newPin = isAdmin() ? f.elements.supPin.value.trim() : '';
       let supPin = null; // null = keep whatever is there
       if (isSup) {
         if (newPin) {
