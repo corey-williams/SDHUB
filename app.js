@@ -1534,7 +1534,7 @@
           const cls = ['pto-bar', pending && 'pending', sg.contL && 'cont-l', sg.contR && 'cont-r'].filter(Boolean).join(' ');
           const hours = isPartial(sg.p) ? ptoHours(sg.p) : '';
           const tip = `${sg.e.name}: ${fmtRange(sg.p.start, sg.p.end)}${hours ? `, ${hours}` : ''}${pending ? ' (pending approval)' : ''}${sg.p.note ? ` — ${sg.p.note}` : ''}`;
-          return `<div class="${cls}${hours ? ' partial' : ''}" style="--c:${sg.e.color};grid-column:${sg.col + 1} / span ${sg.span};grid-row:${sg.lane + 1}" title="${esc(tip)}">${esc(sg.e.name)}${hours ? ` <b>${esc(hours)}</b>` : ''}${pending ? ' <em>pending</em>' : ''}</div>`;
+          return `<div class="${cls}${hours ? ' partial' : ''}" data-pto="${sg.p.id}" style="--c:${sg.e.color};grid-column:${sg.col + 1} / span ${sg.span};grid-row:${sg.lane + 1}" title="${esc(tip)}">${esc(sg.e.name)}${hours ? ` <b>${esc(hours)}</b>` : ''}${pending ? ' <em>pending</em>' : ''}</div>`;
         })
         .join('');
 
@@ -2578,7 +2578,10 @@
     $('#pto-region').onchange = (ev) => { S.ptoRegion = ev.target.value; renderPtoFilters(); renderCalendar(); renderPtoList(); };
     $('#cal-employee').onchange = (ev) => { S.calFilter = ev.target.value; renderCalendar(); renderPtoList(); };
     $('#cal-grid').onclick = (ev) => {
-      // A bar sits on top of the days; clicking it picks the day underneath.
+      // Clicking a PTO bar opens that request to change or delete it.
+      const bar = ev.target.closest('[data-pto]');
+      if (bar) return openPtoEdit(bar.dataset.pto);
+      // Other bars (holidays) sit on top of the days; clicking picks the day underneath.
       const day = ev.target.closest('.day') || document.elementsFromPoint(ev.clientX, ev.clientY).find((el) => el.classList.contains('day'));
       if (!day) return;
       S.selected = day.dataset.date;
@@ -2647,6 +2650,93 @@
         updatePtoHint();
       }
     };
+    // Edit time off dialog
+    const pe = $('#pe-form');
+    const setPeMode = (mode) => {
+      pe.ptoMode.value = mode;
+      $$('#pe-mode button').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
+      $('#pe-start-label').textContent = mode === 'leave' ? 'Leaving at' : 'From';
+      $('#pe-end-wrap').hidden = mode === 'leave';
+      updatePeHint();
+    };
+    function updatePeHint() {
+      const a = pe.start.value, b = pe.end.value;
+      const p = S.pto.find((x) => x.id === S.peId);
+      let t = '';
+      if (a && b && b >= a) {
+        const n = daysBetween(a, b), each = n > 1 ? ` on each of ${n} days` : '';
+        const s = pe.ptoStart.value, e = pe.ptoEnd.value;
+        if (pe.fullDay.checked) t = `${n} calendar day${n === 1 ? '' : 's'}`;
+        else if (pe.ptoMode.value === 'leave') t = TIME_RE.test(s) ? `Leaving at ${fmtTime(s)}, out the rest of the shift${each}` : '';
+        else if (TIME_RE.test(s) && TIME_RE.test(e) && e > s) t = `${fmtTime(s)} – ${fmtTime(e)} (${+((toMin(e) - toMin(s)) / 60).toFixed(2)} hrs)${each}`;
+      }
+      if (p && p.status !== 'pending' && !S.admin) t += `${t ? '. ' : ''}Saving changes sends it back for approval.`;
+      $('#pe-hint').textContent = t;
+    }
+    function openPtoEdit(id) {
+      const p = S.pto.find((x) => x.id === id);
+      const e = p && emp(p.employeeId);
+      if (!e) return;
+      S.peId = id;
+      const label = p.status[0].toUpperCase() + p.status.slice(1);
+      $('#pe-who').innerHTML = `${avatar(e)}<span>${esc(e.name)}</span><span class="tag ${esc(p.status)}">${esc(label)}</span>`;
+      pe.start.value = p.start;
+      pe.end.value = p.end;
+      pe.end.min = p.start;
+      const partial = isPartial(p);
+      pe.fullDay.checked = !partial;
+      $('#pe-times').hidden = !partial;
+      pe.ptoStart.value = partial ? p.startTime : '13:00';
+      pe.ptoEnd.value = partial && !p.leaveAt ? p.endTime : '15:00';
+      pe.note.value = p.note || '';
+      // Only admins and supervisors can delete approved time off.
+      $('#pe-delete').hidden = p.status === 'approved' && !S.admin;
+      setPeMode(partial && !p.leaveAt ? 'range' : 'leave');
+      $('#pe-dialog').showModal();
+    }
+    $$('#pe-dialog [data-close]').forEach((b) => (b.onclick = () => $('#pe-dialog').close()));
+    $('#pe-mode').onclick = (ev) => {
+      const b = ev.target.closest('button');
+      if (b) setPeMode(b.dataset.mode);
+    };
+    pe.fullDay.addEventListener('change', () => { $('#pe-times').hidden = pe.fullDay.checked; updatePeHint(); });
+    pe.start.addEventListener('change', () => {
+      if (!pe.end.value || pe.end.value < pe.start.value) pe.end.value = pe.start.value;
+      pe.end.min = pe.start.value;
+      updatePeHint();
+    });
+    pe.addEventListener('change', updatePeHint);
+    pe.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const id = S.peId;
+      const orig = S.pto.find((x) => x.id === id);
+      if (!orig) return;
+      const body = { ...Object.fromEntries(new FormData(pe)), employeeId: orig.employeeId, fullDay: pe.fullDay.checked };
+      let reopened = false;
+      const ok = await mutate((d) => {
+        const p = findIn(d.pto, id, 'request');
+        const clean = cleanPto(body, d);
+        delete p.startTime; delete p.endTime; delete p.leaveAt;
+        Object.assign(p, clean);
+        // A non-admin changing decided time off sends it back for approval.
+        if (!S.admin && p.status !== 'pending') { p.status = 'pending'; p.decidedAt = null; reopened = true; }
+        p.updatedAt = new Date().toISOString();
+      }, 'Time off updated');
+      if (ok) {
+        $('#pe-dialog').close();
+        if (reopened) toast('Sent back for approval');
+        if (S.admin && orig.status === 'approved') warnGaps(body.start, body.end, regionOf(emp(orig.employeeId) || {}));
+      }
+    };
+    $('#pe-delete').onclick = async () => {
+      const id = S.peId;
+      const p = S.pto.find((x) => x.id === id);
+      const e = p && emp(p.employeeId);
+      if (!p || !(await confirmBox('Delete time off?', `${e ? e.name + ', ' : ''}${fmtRange(p.start, p.end)}. This removes the request for everyone.`, 'Delete'))) return;
+      const ok = await mutate((d) => { findIn(d.pto, id, 'request'); d.pto = d.pto.filter((x) => x.id !== id); }, 'Time off deleted');
+      if (ok) $('#pe-dialog').close();
+    };
+
     $('#pto-filter').onclick = (ev) => {
       const b = ev.target.closest('button');
       if (!b) return;

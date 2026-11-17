@@ -419,6 +419,45 @@
     </button>
   </div>
 
+  <!-- Edit a PTO request (opened by clicking its bar on the PTO calendar) -->
+  <dialog id="pe-dialog" class="mid-dialog">
+    <form id="pe-form" autocomplete="off">
+      <div class="dialog-head">
+        <h2>Edit time off</h2>
+        <button type="button" class="btn ghost icon" data-close aria-label="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="pe-who" id="pe-who"></div>
+      <div class="row2">
+        <label>Start date <input type="date" name="start" required /></label>
+        <label>End date <input type="date" name="end" required /></label>
+      </div>
+      <label class="toggle"><input type="checkbox" name="fullDay" /> Full day</label>
+      <div id="pe-times" class="pto-times">
+        <input type="hidden" name="ptoMode" value="leave" />
+        <div class="seg" id="pe-mode">
+          <button type="button" data-mode="leave" class="on">Leaving at</button>
+          <button type="button" data-mode="range">From – to</button>
+        </div>
+        <div class="row2">
+          <label><span id="pe-start-label">Leaving at</span> <input type="time" name="ptoStart" step="900" /></label>
+          <label id="pe-end-wrap" hidden>To <input type="time" name="ptoEnd" step="900" /></label>
+        </div>
+      </div>
+      <label>Note <span class="muted small">(optional)</span>
+        <textarea name="note" rows="2" maxlength="300"></textarea>
+      </label>
+      <p class="muted small" id="pe-hint"></p>
+      <div class="dialog-foot">
+        <button type="button" class="btn ghost danger-text" id="pe-delete">Delete</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" data-close>Cancel</button>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Meeting block -->
   <dialog id="mtg-dialog" class="mid-dialog">
     <form id="mtg-form" autocomplete="off">
