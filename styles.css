@@ -351,7 +351,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .mid-dialog { width: min(480px, calc(100vw - 32px)); }
 .mid-dialog p { margin: -6px 0 0; }
 .small-banner { margin: 0; padding: 10px 12px; font-size: 12.5px; }
-.adj-card { grid-column: 1 / -1; }
+.adj-card { min-width: 0; }
 
 /* ---------- weekly schedule: same hours mode ---------- */
 #sched-mode button { font-size: 12px; padding: 5px 10px; }
@@ -432,7 +432,7 @@ body.is-supervisor .admin-only { display: none !important; }
 #pin-prompt form > input { width: 100%; }
 
 /* ---------- holidays ---------- */
-.hol-card { grid-column: 1 / -1; }
+.hol-card { min-width: 0; }
 .hol-tools { display: flex; align-items: center; gap: 12px; }
 .hol-year { display: flex; align-items: center; gap: 4px; font-weight: 700; }
 .hol-year span { min-width: 44px; text-align: center; }
@@ -481,8 +481,8 @@ body.is-supervisor .admin-only { display: none !important; }
 .tl-gap span { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 700; color: #b91c1c; white-space: nowrap; background: rgba(255,255,255,.85); padding: 0 4px; border-radius: 4px; }
 .cov-cell.zero { background: var(--bad-soft); color: var(--bad); }
 .toast.warn { background: #b45309; max-width: 420px; }
-.cov-card { grid-column: 1 / -1; }
-.cov-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+.cov-card { min-width: 0; }
+.cov-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; align-items: start; }
 .cov-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; }
 .rc-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .rc-row { display: grid; grid-template-columns: 110px auto 1fr; align-items: center; gap: 14px; padding: 10px 12px; border-top: 1px solid var(--border); }
