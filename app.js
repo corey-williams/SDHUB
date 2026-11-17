@@ -1060,16 +1060,6 @@
     const off = status.off.filter((o) => inRegion(o.e, S.region));
     const pendingPto = [...working, ...off].filter((x) => x.pending);
 
-    const starts = working.map((w) => toMin(w.shift.start));
-    const ends = working.map((w) => shiftEndMin(w.shift));
-    $('#home-stats').innerHTML = [
-      [working.length, 'Working', ''],
-      [starts.length ? minToTime(Math.min(...starts)) : '—', 'First in', ''],
-      [ends.length ? minToTime(Math.max(...ends)) : '—', 'Last out', ''],
-      [onPto.length, 'On PTO', onPto.length ? 'warn' : ''],
-    ]
-      .map(([v, l, c]) => `<div class="card stat ${c}"><div class="stat-v">${esc(v)}</div><div class="stat-l">${l}</div></div>`)
-      .join('');
 
     // Coverage check per region: "All regions" shows every checked region,
     // a single region's tab shows just that region.
