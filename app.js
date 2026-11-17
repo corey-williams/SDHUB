@@ -1534,8 +1534,15 @@
   }
 
   function renderPtoForm() {
-    const sel = $('#pto-form [name=employeeId]');
-    const prev = sel.value;
+    const f = $('#pto-form');
+    const sel = f.employeeId;
+    // Keep the person picked here; otherwise use whoever this browser last submitted for.
+    const prev = sel.value || localStorage.getItem('sdh-pto-emp') || '';
+    // Dates default to today until someone picks other dates.
+    const today = ymd(new Date());
+    if (!f.start.value) f.start.value = today;
+    if (!f.end.value) f.end.value = f.start.value;
+    f.end.min = f.start.value;
     if (!S.employees.length) {
       sel.innerHTML = `<option value="" disabled selected>No employees yet</option>`;
     } else {
@@ -2601,7 +2608,13 @@
         d.pto.push({ id: uid(), ...cleanPto(body, d), status: 'pending', createdAt: new Date().toISOString(), decidedAt: null });
       }, 'Request submitted');
       if (ok) {
+        // Clear the request but keep the person, and go back to today's date.
+        const who = body.employeeId;
+        localStorage.setItem('sdh-pto-emp', who);
         pf.reset();
+        pf.employeeId.value = who;
+        pf.start.value = pf.end.value = ymd(new Date());
+        pf.end.min = pf.start.value;
         $('#pto-times').hidden = true;
         S.selected = null;
         renderCalendar();
