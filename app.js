@@ -178,10 +178,84 @@
     }
     return best;
   }
+  // On a full-day holiday nobody works unless an admin adjusted their hours or
+  // added a shift for that day. On a half day, shifts end at closing time.
   function effectiveShift(e, dateStr, dow = parseYmd(dateStr).getDay()) {
     const base = e.schedule[dow];
+    const hol = holidayOn(dateStr);
+    if (hol) {
+      const o = overrideFor(e, dateStr, false);
+      if (o) return { on: true, start: o.startTime, end: o.endTime, override: o, extra: !base.on || hol.kind === 'full', holiday: hol };
+      if (hol.kind === 'full' || !base.on) return { ...base, on: false, holiday: hol };
+      const close = toMin(hol.closesAt || '12:00');
+      if (toMin(base.start) >= close) return { ...base, on: false, holiday: hol };
+      return { on: true, start: base.start, end: minToHHMM(Math.min(shiftEndMin(base), close)), holiday: hol, halfDay: true };
+    }
     const o = overrideFor(e, dateStr, !base.on);
     return o ? { on: true, start: o.startTime, end: o.endTime, override: o, extra: !base.on } : base;
+  }
+
+  // ---------- holidays ----------
+  // Rules: 'fixed' = same date every year (optionally observed on the nearest
+  // weekday when it lands on a weekend), 'nth' = e.g. 4th Thursday of November
+  // (n = -1 means the last one), 'date' = one specific date.
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const DEFAULT_HOLIDAYS = [
+    { id: 'h-newyear', name: "New Year's Day", rule: { type: 'fixed', month: 1, day: 1, observe: true }, kind: 'full' },
+    { id: 'h-memorial', name: 'Memorial Day', rule: { type: 'nth', month: 5, weekday: 1, n: -1 }, kind: 'full' },
+    { id: 'h-july4', name: 'Independence Day', rule: { type: 'fixed', month: 7, day: 4, observe: true }, kind: 'full' },
+    { id: 'h-labor', name: 'Labor Day', rule: { type: 'nth', month: 9, weekday: 1, n: 1 }, kind: 'full' },
+    { id: 'h-thanks', name: 'Thanksgiving', rule: { type: 'nth', month: 11, weekday: 4, n: 4 }, kind: 'full' },
+    { id: 'h-xmaseve', name: 'Christmas Eve', rule: { type: 'fixed', month: 12, day: 24, observe: false }, kind: 'half', closesAt: '12:00' },
+    { id: 'h-xmas', name: 'Christmas Day', rule: { type: 'fixed', month: 12, day: 25, observe: true }, kind: 'full' },
+  ];
+  function holidayDate(h, year) {
+    const r = h.rule || {};
+    if (r.type === 'date') return DATE_RE.test(r.date) && Number(r.date.slice(0, 4)) === year ? r.date : null;
+    if (r.type === 'nth') {
+      const m = r.month - 1;
+      if (r.n === -1) {
+        const last = new Date(year, m + 1, 0);
+        return ymd(new Date(year, m, last.getDate() - ((last.getDay() - r.weekday + 7) % 7)));
+      }
+      const first = new Date(year, m, 1);
+      const day = 1 + ((r.weekday - first.getDay() + 7) % 7) + (r.n - 1) * 7;
+      const d = new Date(year, m, day);
+      return d.getMonth() === m ? ymd(d) : null;
+    }
+    if (r.type === 'fixed') {
+      const d = new Date(year, r.month - 1, r.day);
+      if (r.observe && d.getDay() === 6) d.setDate(d.getDate() - 1); // Saturday → Friday
+      else if (r.observe && d.getDay() === 0) d.setDate(d.getDate() + 1); // Sunday → Monday
+      return ymd(d);
+    }
+    return null;
+  }
+  // Holidays observed on a date (a Jan 1 on a Saturday is observed Dec 31,
+  // so the next year's rules are checked too). Full days come first.
+  function holidaysOn(dateStr) {
+    const y = Number(dateStr.slice(0, 4));
+    const out = [];
+    for (const h of S.data?.settings.holidays || []) {
+      if (holidayDate(h, y) === dateStr || holidayDate(h, y + 1) === dateStr) out.push(h);
+    }
+    return out.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'full' ? -1 : 1));
+  }
+  function holidayOn(dateStr) {
+    return holidaysOn(dateStr)[0] || null;
+  }
+  function holidayLabel(h) {
+    return h.kind === 'half' ? `Half day, closes at ${fmtTime(h.closesAt || '12:00')}` : 'Office closed';
+  }
+  function ruleLabel(r) {
+    if (r.type === 'fixed') return `Every ${MONTHS[r.month - 1]} ${r.day}${r.observe ? ' (weekday observed)' : ''}`;
+    if (r.type === 'nth') return `${r.n === -1 ? 'Last' : ['1st', '2nd', '3rd', '4th', '5th'][r.n - 1]} ${DAY_NAMES[r.weekday]} of ${MONTHS[r.month - 1]}`;
+    if (r.type === 'date') return 'One time only';
+    return '';
+  }
+  function normHolidays(list) {
+    if (!Array.isArray(list)) return DEFAULT_HOLIDAYS.map((h) => JSON.parse(JSON.stringify(h)));
+    return list.filter((h) => h && typeof h.name === 'string' && h.rule && ['fixed', 'nth', 'date'].includes(h.rule.type));
   }
   // ---------- recurring meetings ----------
   // A meeting starts on m.date and may repeat: 'daily', 'weekly', 'biweekly'
@@ -308,10 +382,13 @@
   function coverageWindow(dateStr, region) {
     const c = regionCoverage(region);
     if (!c.days.includes(parseYmd(dateStr).getDay())) return null;
+    const hol = holidayOn(dateStr);
+    if (hol?.kind === 'full') return null; // closed: nothing to cover
     const s = toMin(c.start);
     let e = toMin(c.end);
     if (e <= s) e += 1440;
-    return { s, e };
+    if (hol) e = Math.min(e, toMin(hol.closesAt || '12:00')); // half day: only until closing
+    return e > s ? { s, e } : null;
   }
   function fmtWindow(w) {
     return `${minToTime(w.s)} – ${minToTime(w.e)}`;
@@ -500,6 +577,7 @@
         coverageOff: Array.isArray(d.settings?.coverageOff) ? d.settings.coverageOff.filter((r) => REGIONS.includes(r)) : [],
         coverage: normCoverage(d.settings?.coverage),
         regionCoverage: normRegionCoverage(d.settings?.regionCoverage, normCoverage(d.settings?.coverage)),
+        holidays: normHolidays(d.settings?.holidays),
         keySalt: d.settings?.keySalt || null,
       },
       employees: Array.isArray(d.employees) ? d.employees : [],
@@ -525,7 +603,7 @@
         ]
       : [];
     // Emplify starts hidden; an admin can show it under Admin → Settings.
-    return { version: 1, settings: { adminPinHash: await sha256(DEFAULT_PIN), hiddenRegions: ['Emplify'], coverage: defaultCoverage(), regionCoverage: normRegionCoverage(null, defaultCoverage()) }, employees, pto: [], overrides: [], meetings: [], updatedAt: new Date().toISOString() };
+    return { version: 1, settings: { adminPinHash: await sha256(DEFAULT_PIN), hiddenRegions: ['Emplify'], coverage: defaultCoverage(), regionCoverage: normRegionCoverage(null, defaultCoverage()), holidays: normHolidays(null) }, employees, pto: [], overrides: [], meetings: [], updatedAt: new Date().toISOString() };
   }
 
   // ---------- remembered folder (IndexedDB) ----------
@@ -915,6 +993,16 @@
 
     // Coverage check per region: "All regions" shows every checked region,
     // a single region's tab shows just that region.
+    const hols = holidaysOn(ds);
+    const hb = $('#holiday-banner');
+    hb.hidden = !hols.length;
+    hb.innerHTML = hols
+      .map(
+        (h) => `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+        <div><b>${esc(h.name)}</b> · ${esc(holidayLabel(h))}</div>`
+      )
+      .join('');
+
     const checks = regionGaps(ds).filter((x) => S.region === 'all' || x.region === S.region);
     const gapMap = Object.fromEntries(checks.map((x) => [x.region, x.gaps]));
     const bad = checks.filter((x) => x.gaps.length);
@@ -1183,7 +1271,13 @@
       html += section(
         'Not scheduled',
         notScheduled.length,
-        notScheduled.map((o) => personRow(o.e, S.admin ? `<button class="btn ghost xs" data-add-shift="${o.e.id}">Add shift</button>` : '', sub(o.e, 'Regular day off'))).join('')
+        notScheduled
+          .map((o) => {
+            const hol = holidayOn(S.homeDate);
+            const why = hol && (hol.kind === 'full' || o.e.schedule[parseYmd(S.homeDate).getDay()].on) ? esc(hol.name) : 'Regular day off';
+            return personRow(o.e, S.admin ? `<button class="btn ghost xs" data-add-shift="${o.e.id}">Add shift</button>` : '', sub(o.e, why));
+          })
+          .join('')
       );
     $('#time-off').innerHTML = html;
   }
@@ -1236,18 +1330,20 @@
         })
         .sort((a, b) => a.col - b.col || b.span - a.span || (a.p.status === b.p.status ? a.e.name.localeCompare(b.e.name) : a.p.status === 'approved' ? -1 : 1));
 
-      // Stack bars into lanes so overlapping time off doesn't collide.
-      const laneEnds = [];
-      for (const sg of segs) {
-        let lane = laneEnds.findIndex((end) => end < sg.col);
-        if (lane === -1) {
-          lane = laneEnds.length;
-          laneEnds.push(-1);
-        }
-        laneEnds[lane] = sg.col + sg.span - 1;
+      // Holidays go in the top lane first, then PTO bars are stacked into the
+      // first lane that's free for all of their days.
+      const holSegs = days.flatMap((d, i) => holidaysOn(ymd(d)).map((h) => ({ h, col: i, span: 1 })));
+      const occ = []; // occ[lane][col] = taken
+      const place = (sg) => {
+        let lane = 0;
+        while (occ[lane] && [...Array(sg.span)].some((_, k) => occ[lane][sg.col + k])) lane++;
+        occ[lane] = occ[lane] || Array(7).fill(false);
+        for (let k = 0; k < sg.span; k++) occ[lane][sg.col + k] = true;
         sg.lane = lane;
-      }
-      const lanes = Math.min(laneEnds.length, MAX_LANES);
+      };
+      holSegs.forEach(place);
+      segs.forEach(place);
+      const lanes = Math.min(occ.length, MAX_LANES);
       const count = Array(7).fill(0), hidden = Array(7).fill(0);
       for (const sg of segs) {
         for (let c = sg.col; c < sg.col + sg.span; c++) {
@@ -1259,17 +1355,25 @@
       const cells = days
         .map((d, i) => {
           const ds = ymd(d);
-          const cls = ['day', d.getMonth() !== m && 'other', ds === today && 'today', ds === S.selected && 'selected', (d.getDay() === 0 || d.getDay() === 6) && 'weekend']
+          const hol = holidayOn(ds);
+          const cls = ['day', d.getMonth() !== m && 'other', ds === today && 'today', ds === S.selected && 'selected', (d.getDay() === 0 || d.getDay() === 6) && 'weekend', hol && 'holiday']
             .filter(Boolean)
             .join(' ');
-          return `<button class="${cls}" data-date="${ds}" aria-label="${fmtDate(ds, { weekday: 'long', month: 'long', day: 'numeric' })}${count[i] ? `, ${count[i]} on PTO` : ''}">
+          return `<button class="${cls}" data-date="${ds}" aria-label="${fmtDate(ds, { weekday: 'long', month: 'long', day: 'numeric' })}${hol ? `, ${esc(hol.name)}` : ''}${count[i] ? `, ${count[i]} on PTO` : ''}">
             <div class="day-top"><span class="day-num">${d.getDate()}</span>${count[i] ? `<span class="day-count">${count[i]} off</span>` : ''}</div>
             ${hidden[i] ? `<span class="more">+${hidden[i]} more</span>` : ''}
           </button>`;
         })
         .join('');
 
-      const bars = segs
+      const holBars = holSegs
+        .filter((sg) => sg.lane < MAX_LANES)
+        .map(
+          (sg) =>
+            `<div class="pto-bar hol-bar ${sg.h.kind}" style="grid-column:${sg.col + 1} / span 1;grid-row:${sg.lane + 1}" title="${esc(sg.h.name)}: ${esc(holidayLabel(sg.h))}">${esc(sg.h.name)}${sg.h.kind === 'half' ? ' <em>½ day</em>' : ''}</div>`
+        )
+        .join('');
+      const bars = holBars + segs
         .filter((sg) => sg.lane < MAX_LANES)
         .map((sg) => {
           const pending = sg.p.status === 'pending';
@@ -1390,6 +1494,7 @@
 
     // Coverage hours editor (left alone while someone is editing it).
     if (!S.covDirty) renderCoverageEditor();
+    renderHolidays();
     // One entry per day that has a gap, listing each affected region.
     const alerts = [];
     for (let i = 0; i < 14; i++) {
@@ -1445,6 +1550,95 @@
           <label class="toggle" title="${hidden ? 'Hidden regions are not checked' : ''}"><input type="checkbox" data-cov-toggle="${esc(r)}" ${alertsOn(r) ? 'checked' : ''} ${hidden ? 'disabled' : ''} aria-label="Gap alerts for ${esc(r)}" /></label>
         </div>`;
       }).join('');
+  }
+
+  // ---------- Admin → Holidays ----------
+  function renderHolidays() {
+    const year = S.holYear || (S.holYear = new Date().getFullYear());
+    $('#hol-year-label').textContent = year;
+    const rows = (S.data.settings.holidays || [])
+      .map((h) => ({ h, date: holidayDate(h, year) }))
+      .filter((x) => x.date)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const today = ymd(new Date());
+    $('#hol-list').innerHTML = rows.length
+      ? rows
+          .map(
+            ({ h, date }) => `<div class="hol-row ${date < today ? 'past' : ''}">
+              <div class="hol-date"><b>${fmtDate(date, { month: 'short', day: 'numeric' })}</b><span>${fmtDate(date, { weekday: 'short' })}</span></div>
+              <div class="hol-main"><div class="hol-name">${esc(h.name)}</div><div class="hol-rule-text">${esc(ruleLabel(h.rule))}</div></div>
+              <span class="tag ${h.kind === 'half' ? 'pending' : 'denied'}">${h.kind === 'half' ? `Half day · closes ${fmtTime(h.closesAt || '12:00')}` : 'Full day'}</span>
+              <div class="req-actions">${isAdmin() ? `<button class="btn ghost xs" data-edit-hol="${esc(h.id)}">Edit</button>` : ''}</div>
+            </div>`
+          )
+          .join('')
+      : `<div class="empty-big">No holidays in ${year}.</div>`;
+  }
+
+  function openHolidayDialog(id = null) {
+    const h = id ? S.data.settings.holidays.find((x) => x.id === id) : null;
+    S.holEditing = h ? h.id : null;
+    const f = $('#hol-form').elements;
+    $('#hol-title').textContent = h ? 'Edit holiday' : 'Add holiday';
+    const monthOpts = MONTHS.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+    f.fixMonth.innerHTML = monthOpts;
+    f.nthMonth.innerHTML = monthOpts;
+    f.nthWeekday.innerHTML = DAY_NAMES.map((d, i) => `<option value="${i}">${d}</option>`).join('');
+    const r = h?.rule || { type: 'fixed', month: 1, day: 1, observe: true };
+    f.holName.value = h?.name || '';
+    f.holType.value = r.type;
+    f.fixMonth.value = String(r.type === 'fixed' ? r.month : 1);
+    f.fixDay.value = String(r.type === 'fixed' ? r.day : 1);
+    f.fixObserve.checked = r.type === 'fixed' ? !!r.observe : true;
+    f.nthN.value = String(r.type === 'nth' ? r.n : 1);
+    f.nthWeekday.value = String(r.type === 'nth' ? r.weekday : 1);
+    f.nthMonth.value = String(r.type === 'nth' ? r.month : 1);
+    f.oneDate.value = r.type === 'date' ? r.date : '';
+    f.holClose.value = h?.closesAt || '12:00';
+    setHolKind(h?.kind || 'full');
+    $('#hol-delete').hidden = !h;
+    updateHolForm();
+    $('#hol-dialog').showModal();
+    f.holName.focus();
+  }
+  function setHolKind(kind) {
+    S.holKind = kind;
+    $$('#hol-kind [data-kind]').forEach((b) => b.classList.toggle('on', b.dataset.kind === kind));
+    $('#hol-close-wrap').hidden = kind !== 'half';
+    updateHolForm();
+  }
+  function readHolRule() {
+    const f = $('#hol-form').elements;
+    const type = f.holType.value;
+    if (type === 'fixed') return { type, month: Number(f.fixMonth.value), day: Number(f.fixDay.value), observe: f.fixObserve.checked };
+    if (type === 'nth') return { type, month: Number(f.nthMonth.value), weekday: Number(f.nthWeekday.value), n: Number(f.nthN.value) };
+    return { type, date: f.oneDate.value };
+  }
+  // Show only the fields for the chosen rule, and preview the next date.
+  function updateHolForm() {
+    const f = $('#hol-form').elements;
+    $$('#hol-form .hol-rule').forEach((el) => (el.hidden = el.dataset.for !== f.holType.value));
+    const rule = readHolRule();
+    const y = S.holYear || new Date().getFullYear();
+    const dates = [y, y + 1].map((yr) => holidayDate({ rule }, yr)).filter(Boolean);
+    $('#hol-preview').textContent = dates.length
+      ? `Closed ${dates.map((d) => fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })).join(' and ')}${S.holKind === 'half' ? ` from ${fmtTime(f.holClose.value || '12:00')}` : ''}`
+      : rule.type === 'date' ? 'Pick a date' : '';
+  }
+  function cleanHoliday() {
+    const f = $('#hol-form').elements;
+    const name = str(f.holName.value, 'Name', 60);
+    const rule = readHolRule();
+    if (rule.type === 'fixed') {
+      const max = new Date(2024, rule.month, 0).getDate(); // leap year allows Feb 29
+      if (!(rule.day >= 1 && rule.day <= max)) throw new Error(`${MONTHS[rule.month - 1]} only has ${max} days`);
+    }
+    if (rule.type === 'date' && !DATE_RE.test(rule.date)) throw new Error('Please pick a date');
+    if (rule.type === 'nth' && rule.n !== -1 && !holidayDate({ rule }, S.holYear || new Date().getFullYear()))
+      throw new Error("That month doesn't have that many of that weekday");
+    const kind = S.holKind === 'half' ? 'half' : 'full';
+    if (kind === 'half' && !TIME_RE.test(f.holClose.value)) throw new Error('Please enter a closing time');
+    return { name, rule, kind, ...(kind === 'half' ? { closesAt: f.holClose.value } : {}) };
   }
 
   // Admin → Coverage hours: one row per shown region with a start/end time
@@ -2221,6 +2415,47 @@
         d.settings.regionCoverage = { ...(d.settings.regionCoverage || {}), ...rc };
       }, 'Coverage hours saved');
       if (!ok) S.covDirty = true;
+    };
+
+    // holidays
+    $('#hol-prev').onclick = () => { S.holYear = (S.holYear || new Date().getFullYear()) - 1; renderHolidays(); };
+    $('#hol-next').onclick = () => { S.holYear = (S.holYear || new Date().getFullYear()) + 1; renderHolidays(); };
+    $('#add-holiday').onclick = () => openHolidayDialog(null);
+    $('#hol-list').addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-edit-hol]');
+      if (b) openHolidayDialog(b.dataset.editHol);
+    });
+    $$('#hol-dialog [data-close]').forEach((b) => (b.onclick = () => $('#hol-dialog').close()));
+    $('#hol-kind').onclick = (ev) => {
+      const b = ev.target.closest('[data-kind]');
+      if (b) setHolKind(b.dataset.kind);
+    };
+    $('#hol-form').addEventListener('change', updateHolForm);
+    $('#hol-form').addEventListener('input', updateHolForm);
+    $('#hol-form').onsubmit = async (ev) => {
+      ev.preventDefault();
+      let clean;
+      try {
+        clean = cleanHoliday();
+      } catch (e) {
+        return toast(e.message, true);
+      }
+      const id = S.holEditing;
+      const ok = await mutate((d) => {
+        if (id) Object.assign(findIn(d.settings.holidays, id, 'holiday'), clean);
+        else d.settings.holidays.push({ id: 'h-' + uid(), ...clean });
+      }, id ? 'Holiday updated' : `${clean.name} added`);
+      if (ok) $('#hol-dialog').close();
+    };
+    $('#hol-delete').onclick = async () => {
+      const id = S.holEditing;
+      const h = S.data.settings.holidays.find((x) => x.id === id);
+      if (!h || !(await confirmBox(`Remove ${h.name}?`, 'It will no longer appear on the calendar in any year.', 'Remove'))) return;
+      const ok = await mutate((d) => {
+        findIn(d.settings.holidays, id, 'holiday');
+        d.settings.holidays = d.settings.holidays.filter((x) => x.id !== id);
+      }, `${h.name} removed`);
+      if (ok) $('#hol-dialog').close();
     };
 
     // show / hide regions

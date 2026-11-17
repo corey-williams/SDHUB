@@ -32,6 +32,10 @@ The service desk's team calendar, schedules and PTO.
     - Home shows a red **No coverage** banner naming the region (for example "Gundersen 6 AM – 7:30 AM (1.5 hrs)") and shades the gap over that region's rows. On a single region's tab, only that region is shown.
     - adjusting hours, approving PTO or adding a meeting that causes a gap in that person's region shows a warning right away
     - Admin lists gaps for the next 14 days by day and region, each with a **View** button that opens that day
+  - **Holidays:** comes pre-filled with New Year's Day, Memorial Day, Independence Day, Labor Day, Thanksgiving, Christmas Eve (half day, closes at noon) and Christmas Day.
+    - Dates are calculated for each year automatically (use the year arrows to look ahead). A fixed-date holiday that lands on a weekend is observed on the nearest weekday (Saturday → Friday, Sunday → Monday) unless you switch that off.
+    - **Add holiday** / **Edit**: same date every year, a weekday pattern (e.g. 4th Thursday of November, last Monday of May) or one time only, as a **Full day** or a **Half day** with a closing time.
+    - Holidays show first on that day in the PTO calendar, and Home shows a holiday banner. On a full holiday nobody is scheduled (use **Add shift** if someone needs to work) and coverage isn't checked. On a half day, shifts and coverage end at closing time.
   - **Settings → Regions:** show or hide each region. Emplify starts hidden. A hidden region and everyone in it are left off the Home and PTO tabs, including "All regions". They still show in Admin, so nothing is lost when the region is turned back on.
 
 ## Files
