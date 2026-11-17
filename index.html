@@ -143,6 +143,11 @@
             <label>Start date <input type="date" name="start" required /></label>
             <label>End date <input type="date" name="end" required /></label>
           </div>
+          <label class="toggle"><input type="checkbox" name="fullDay" checked /> Full day</label>
+          <div class="row2" id="pto-times" hidden>
+            <label>From <input type="time" name="ptoStart" step="900" value="13:00" /></label>
+            <label>To <input type="time" name="ptoEnd" step="900" value="15:00" /></label>
+          </div>
           <label>Note <span class="muted small">(optional)</span>
             <textarea name="note" rows="3" maxlength="300" placeholder="Anything the team should know"></textarea>
           </label>

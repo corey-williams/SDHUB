@@ -360,9 +360,22 @@
       .filter((x) => x.to > x.from)
       .sort((a, b) => a.from - b.from);
   }
+  // Approved partial-day PTO on a date, as minute spans inside their shift.
+  function ptoSpans(e, dateStr, shift) {
+    if (!shift?.on) return [];
+    const s = toMin(shift.start), end = shiftEndMin(shift);
+    return S.pto
+      .filter((p) => p.employeeId === e.id && p.status === 'approved' && isPartial(p) && p.start <= dateStr && p.end >= dateStr)
+      .map((p) => {
+        let a = toMin(p.startTime), b = toMin(p.endTime);
+        if (a < s && a + 1440 < end) { a += 1440; b += 1440; }
+        return { p, from: Math.max(a, s), to: Math.min(b, end) };
+      })
+      .filter((x) => x.to > x.from);
+  }
   // Everything that makes someone unavailable during their shift.
   function busySpans(e, dateStr, shift) {
-    return [...meetingSpans(e, dateStr, shift), ...breakSpans(e, shift)];
+    return [...meetingSpans(e, dateStr, shift), ...breakSpans(e, shift), ...ptoSpans(e, dateStr, shift)];
   }
   // Fork and knife, used for lunch on the shift bars and in the Events feed.
   const LUNCH_ICON = `<svg class="lunch-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 2v6a3 3 0 0 0 6 0V2"/><path d="M8 2v20"/><path d="M19 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>`;
@@ -495,12 +508,18 @@
     const working = [], pto = [], off = [];
     for (const e of S.employees) {
       const reqs = S.pto.filter((p) => p.employeeId === e.id && p.start <= dateStr && p.end >= dateStr && p.status !== 'denied');
-      const approved = reqs.find((p) => p.status === 'approved');
+      // A full day of approved PTO takes them off; partial-day PTO leaves them
+      // working with those hours blocked out (see ptoSpans).
+      const approved = reqs.find((p) => p.status === 'approved' && !isPartial(p));
+      const partial = reqs.filter((p) => p.status === 'approved' && isPartial(p));
       const pending = reqs.find((p) => p.status === 'pending');
       const shift = effectiveShift(e, dateStr, dow);
       if (approved) pto.push({ e, req: approved, scheduled: shift.on });
-      else if (shift.on) working.push({ e, shift, pending });
-      else off.push({ e, pending });
+      else {
+        if (shift.on) working.push({ e, shift, pending });
+        else off.push({ e, pending });
+        for (const req of partial) pto.push({ e, req, scheduled: shift.on, partial: true });
+      }
     }
     return { working, pto, off };
   }
@@ -602,7 +621,22 @@
     const end = str(body.end, 'End date', 10);
     if (!DATE_RE.test(start) || !DATE_RE.test(end)) throw new Error('Please enter valid dates');
     if (end < start) throw new Error('End date is before start date');
-    return { employeeId, start, end, note: str(body.note, 'Note', 300, false) };
+    // Part of a day: the same hours on each day in the range.
+    const fullDay = body.fullDay !== false;
+    let times = {};
+    if (!fullDay) {
+      if (!TIME_RE.test(body.ptoStart) || !TIME_RE.test(body.ptoEnd)) throw new Error('Enter the hours they will be out');
+      if (body.ptoEnd <= body.ptoStart) throw new Error('The end time must be after the start time');
+      times = { startTime: body.ptoStart, endTime: body.ptoEnd };
+    }
+    return { employeeId, start, end, fullDay, ...times, note: str(body.note, 'Note', 300, false) };
+  }
+  // Partial-day PTO has startTime/endTime; older requests and full days don't.
+  function isPartial(p) {
+    return p.fullDay === false && TIME_RE.test(p.startTime || '') && TIME_RE.test(p.endTime || '');
+  }
+  function ptoHours(p) {
+    return `${fmtTime(p.startTime)} – ${fmtTime(p.endTime)}`;
   }
   function normalize(d) {
     if (!d || typeof d !== 'object') throw new Error('not an object');
@@ -1133,6 +1167,13 @@
             `<div class="brk ${b.kind}" style="left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="${b.label}: ${esc(fmtBreak(b))}">${b.kind === 'lunch' ? LUNCH_ICON : BREAK_ICON}</div>`
         )
         .join('');
+      // Partial-day PTO: the hours they're out, labeled PTO.
+      const ptoBlocks = ptoSpans(w.e, S.homeDate, w.shift)
+        .map(
+          ({ p, from, to }) =>
+            `<div class="ptob" style="left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="PTO: ${esc(ptoHours(p))}${p.note ? ` — ${esc(p.note)}` : ''}"><span>PTO</span></div>`
+        )
+        .join('');
       // Split shift: the part worked for another region, in that region's color.
       const splits = splitSpans(w.e, S.homeDate, w.shift);
       const splitBlocks = splits
@@ -1153,7 +1194,7 @@
         `\nClick to ${S.admin ? 'add a meeting block or adjust hours' : 'add a meeting block'}`;
       return `<div class="tl-row">
         <div class="tl-who">${avatar(w.e, 'sm')}<div class="tl-names"><div class="tl-name">${esc(w.e.name)}</div><div class="tl-sub">${esc(o?.note || w.e.role || '')}</div></div></div>
-        <div class="tl-track"><div class="${cls}" data-emp="${w.e.id}" style="--c:${w.e.color};left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(tip)}"><span>${label}${o ? ` <em>${w.shift.extra ? 'extra shift' : 'adjusted'}</em>` : ''}</span>${splitBlocks}${brkBlocks}${blocks}</div></div>
+        <div class="tl-track"><div class="${cls}" data-emp="${w.e.id}" style="--c:${w.e.color};left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(tip)}"><span>${label}${o ? ` <em>${w.shift.extra ? 'extra shift' : 'adjusted'}</em>` : ''}</span>${splitBlocks}${brkBlocks}${blocks}${ptoBlocks}</div></div>
       </div>`;
     };
     // Someone from another region shown in the region they're covering: a bar
@@ -1288,6 +1329,10 @@
         if (x.from <= nowMin && nowMin < x.to) add(now, { t: x.from, until: x.to, kind: x.kind, text: `${name} is ${x.kind === 'meeting' ? 'in' : 'on'} ${x.label}` });
         else if (nowMin < x.from) add(next, { t: x.from, until: x.to, kind: x.kind, text: `${name} has ${x.what}` });
       }
+      for (const x of ptoSpans(w.e, dateStr, w.shift)) {
+        if (x.from <= nowMin && nowMin < x.to) add(now, { t: x.from, until: x.to, kind: 'pto', text: `${name} is out (PTO)` });
+        else if (nowMin < x.from) add(next, { t: x.from, until: x.to, kind: 'pto', text: `${name} is out for PTO until ${minToTime(x.to)}` });
+      }
       for (const x of splitSpans(w.e, dateStr, w.shift)) {
         if (x.from <= nowMin && nowMin < x.to) add(now, { t: x.from, until: x.to, kind: 'split', text: `${name} is covering ${x.region}` });
         else if (nowMin < x.from) add(next, { t: x.from, until: x.to, kind: 'split', text: `${name} covers ${x.region}` });
@@ -1325,7 +1370,13 @@
 
     // 1. PTO always first.
     const ptoRows = [
-      ...onPto.map((p) => personRow(p.e, `<span class="tag approved">PTO</span>`, sub(p.e, esc(fmtRange(p.req.start, p.req.end))))),
+      ...onPto.map((p) =>
+        personRow(
+          p.e,
+          `<span class="tag approved">${p.partial ? esc(ptoHours(p.req)) : 'PTO'}</span>`,
+          sub(p.e, p.partial ? `Out ${esc(ptoHours(p.req))}${p.req.start !== p.req.end ? ` · ${esc(fmtRange(p.req.start, p.req.end))}` : ''}` : esc(fmtRange(p.req.start, p.req.end)))
+        )
+      ),
       ...pendingPto.map((x) => personRow(x.e, `<span class="tag pending">Pending</span>`, sub(x.e, esc(fmtRange(x.pending.start, x.pending.end))))),
     ];
     const calIcon = `<svg class="sec-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>`;
@@ -1471,8 +1522,9 @@
         .map((sg) => {
           const pending = sg.p.status === 'pending';
           const cls = ['pto-bar', pending && 'pending', sg.contL && 'cont-l', sg.contR && 'cont-r'].filter(Boolean).join(' ');
-          const tip = `${sg.e.name}: ${fmtRange(sg.p.start, sg.p.end)}${pending ? ' (pending approval)' : ''}${sg.p.note ? ` — ${sg.p.note}` : ''}`;
-          return `<div class="${cls}" style="--c:${sg.e.color};grid-column:${sg.col + 1} / span ${sg.span};grid-row:${sg.lane + 1}" title="${esc(tip)}">${esc(sg.e.name)}${pending ? ' <em>pending</em>' : ''}</div>`;
+          const hours = isPartial(sg.p) ? ptoHours(sg.p) : '';
+          const tip = `${sg.e.name}: ${fmtRange(sg.p.start, sg.p.end)}${hours ? `, ${hours}` : ''}${pending ? ' (pending approval)' : ''}${sg.p.note ? ` — ${sg.p.note}` : ''}`;
+          return `<div class="${cls}${hours ? ' partial' : ''}" style="--c:${sg.e.color};grid-column:${sg.col + 1} / span ${sg.span};grid-row:${sg.lane + 1}" title="${esc(tip)}">${esc(sg.e.name)}${hours ? ` <b>${esc(hours)}</b>` : ''}${pending ? ' <em>pending</em>' : ''}</div>`;
         })
         .join('');
 
@@ -1501,7 +1553,14 @@
   function updatePtoHint() {
     const f = $('#pto-form');
     const a = f.start.value, b = f.end.value;
-    $('#pto-days-hint').textContent = a && b && b >= a ? `${daysBetween(a, b)} calendar day${daysBetween(a, b) === 1 ? '' : 's'}` : '';
+    if (!(a && b && b >= a)) return ($('#pto-days-hint').textContent = '');
+    const n = daysBetween(a, b);
+    const days = `${n} calendar day${n === 1 ? '' : 's'}`;
+    const s = f.ptoStart.value, e = f.ptoEnd.value;
+    $('#pto-days-hint').textContent =
+      f.fullDay.checked || !TIME_RE.test(s) || !TIME_RE.test(e) || e <= s
+        ? days
+        : `${fmtTime(s)} – ${fmtTime(e)} (${+((toMin(e) - toMin(s)) / 60).toFixed(2)} hrs)${n > 1 ? ` on each of ${n} days` : ''}`;
   }
 
   function requestRow(p) {
@@ -1519,7 +1578,9 @@
       ${avatar(e)}
       <div class="req-main">
         <div class="req-title">${esc(e.name)} ${regionTag(e)} <span class="tag ${esc(p.status)}">${esc(p.status[0].toUpperCase() + p.status.slice(1))}</span></div>
-        <div class="req-meta">${esc(fmtRange(p.start, p.end))} · ${days} day${days === 1 ? '' : 's'}</div>
+        <div class="req-meta">${esc(fmtRange(p.start, p.end))} · ${
+          isPartial(p) ? `${esc(ptoHours(p))}${days > 1 ? ` on ${days} days` : ''}` : `${days} day${days === 1 ? '' : 's'}`
+        }</div>
         ${p.note ? `<div class="req-note">“${esc(p.note)}”</div>` : ''}
       </div>
       <div class="req-actions">${btns}</div>
@@ -2527,14 +2588,21 @@
       updatePtoHint();
     });
     pf.end.addEventListener('change', updatePtoHint);
+    // Full day on/off shows the From/To hours.
+    pf.fullDay.addEventListener('change', () => {
+      $('#pto-times').hidden = pf.fullDay.checked;
+      updatePtoHint();
+    });
+    $('#pto-times').addEventListener('change', updatePtoHint);
     pf.onsubmit = async (ev) => {
       ev.preventDefault();
-      const body = Object.fromEntries(new FormData(pf));
+      const body = { ...Object.fromEntries(new FormData(pf)), fullDay: pf.fullDay.checked };
       const ok = await mutate((d) => {
         d.pto.push({ id: uid(), ...cleanPto(body, d), status: 'pending', createdAt: new Date().toISOString(), decidedAt: null });
       }, 'Request submitted');
       if (ok) {
         pf.reset();
+        $('#pto-times').hidden = true;
         S.selected = null;
         renderCalendar();
         updatePtoHint();

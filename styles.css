@@ -533,6 +533,18 @@ body.is-supervisor .admin-only { display: none !important; }
 .ev-break::before, .ev-lunch::before { background: repeating-linear-gradient(180deg, #b8bccb 0 3px, #e5e7ef 3px 6px); }
 .ev-meeting::before { background: var(--warn); }
 .ev-split::before { background: var(--accent); }
+.ev-pto::before { background: var(--ok); }
+
+/* Partial-day PTO on a Home shift bar: a white gap with the person's color
+   stripes and a "PTO" label, so it reads as "out" rather than "busy". */
+.ptob {
+  position: absolute; top: 0; bottom: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+  background: repeating-linear-gradient(135deg, #fff 0 4px, color-mix(in srgb, var(--c) 22%, white) 4px 8px);
+  border: 1.5px dashed color-mix(in srgb, var(--c) 70%, white);
+  color: color-mix(in srgb, var(--c) 75%, black); font-size: 10.5px; font-weight: 800; letter-spacing: .04em;
+}
+.pto-bar.partial b { font-weight: 600; opacity: .8; margin-left: 3px; }
 
 /* Split shifts on the Home graph */
 .split {
