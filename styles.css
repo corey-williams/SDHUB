@@ -159,6 +159,9 @@ select option, select optgroup { color: var(--text); background: var(--surface);
 .dp-foot button:disabled { color: #d4d6e0; cursor: default; }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pto-times { display: grid; gap: 10px; }
+.pto-times[hidden] { display: none; }
+.pto-times .seg { justify-self: start; }
 
 .seg { display: flex; gap: 2px; padding: 3px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; }
 .seg button { border: 0; background: none; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--muted); padding: 5px 11px; border-radius: 7px; cursor: pointer; }

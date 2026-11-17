@@ -144,9 +144,16 @@
             <label>End date <input type="date" name="end" required /></label>
           </div>
           <label class="toggle"><input type="checkbox" name="fullDay" checked /> Full day</label>
-          <div class="row2" id="pto-times" hidden>
-            <label>From <input type="time" name="ptoStart" step="900" value="13:00" /></label>
-            <label>To <input type="time" name="ptoEnd" step="900" value="15:00" /></label>
+          <div id="pto-times" class="pto-times" hidden>
+            <input type="hidden" name="ptoMode" value="leave" />
+            <div class="seg" id="pto-mode">
+              <button type="button" data-mode="leave" class="on">Leaving at</button>
+              <button type="button" data-mode="range">From – to</button>
+            </div>
+            <div class="row2">
+              <label><span id="pto-start-label">Leaving at</span> <input type="time" name="ptoStart" step="900" value="13:00" /></label>
+              <label id="pto-end-wrap" hidden>To <input type="time" name="ptoEnd" step="900" value="15:00" /></label>
+            </div>
           </div>
           <label>Note <span class="muted small">(optional)</span>
             <textarea name="note" rows="3" maxlength="300" placeholder="Anything the team should know"></textarea>

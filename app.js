@@ -369,6 +369,7 @@
       .map((p) => {
         let a = toMin(p.startTime), b = toMin(p.endTime);
         if (a < s && a + 1440 < end) { a += 1440; b += 1440; }
+        if (p.leaveAt) b = end; // out for the rest of the shift
         return { p, from: Math.max(a, s), to: Math.min(b, end) };
       })
       .filter((x) => x.to > x.from);
@@ -624,7 +625,11 @@
     // Part of a day: the same hours on each day in the range.
     const fullDay = body.fullDay !== false;
     let times = {};
-    if (!fullDay) {
+    if (!fullDay && body.ptoMode === 'leave') {
+      // Leaving early: out from this time to the end of their shift.
+      if (!TIME_RE.test(body.ptoStart)) throw new Error('Enter the time they are leaving');
+      times = { startTime: body.ptoStart, endTime: '23:59', leaveAt: true };
+    } else if (!fullDay) {
       if (!TIME_RE.test(body.ptoStart) || !TIME_RE.test(body.ptoEnd)) throw new Error('Enter the hours they will be out');
       if (body.ptoEnd <= body.ptoStart) throw new Error('The end time must be after the start time');
       times = { startTime: body.ptoStart, endTime: body.ptoEnd };
@@ -636,6 +641,7 @@
     return p.fullDay === false && TIME_RE.test(p.startTime || '') && TIME_RE.test(p.endTime || '');
   }
   function ptoHours(p) {
+    if (p.leaveAt) return `Leaving at ${fmtTime(p.startTime)}`;
     return `${fmtTime(p.startTime)} – ${fmtTime(p.endTime)}`;
   }
   function normalize(d) {
@@ -1329,15 +1335,19 @@
         if (x.from <= nowMin && nowMin < x.to) add(now, { t: x.from, until: x.to, kind: x.kind, text: `${name} is ${x.kind === 'meeting' ? 'in' : 'on'} ${x.label}` });
         else if (nowMin < x.from) add(next, { t: x.from, until: x.to, kind: x.kind, text: `${name} has ${x.what}` });
       }
+      let leftEarly = false;
       for (const x of ptoSpans(w.e, dateStr, w.shift)) {
-        if (x.from <= nowMin && nowMin < x.to) add(now, { t: x.from, until: x.to, kind: 'pto', text: `${name} is out (PTO)` });
-        else if (nowMin < x.from) add(next, { t: x.from, until: x.to, kind: 'pto', text: `${name} is out for PTO until ${minToTime(x.to)}` });
+        // Leaving early: one "leaves for PTO" event replaces the shift end.
+        const leaving = x.p.leaveAt && x.to >= e;
+        if (leaving) leftEarly = true;
+        if (x.from <= nowMin && nowMin < x.to) add(now, { t: x.from, until: x.to, kind: 'pto', text: leaving ? `${name} left early (PTO)` : `${name} is out (PTO)` });
+        else if (nowMin < x.from) add(next, { t: x.from, until: x.to, kind: 'pto', text: leaving ? `${name} leaves for PTO` : `${name} is out for PTO until ${minToTime(x.to)}` });
       }
       for (const x of splitSpans(w.e, dateStr, w.shift)) {
         if (x.from <= nowMin && nowMin < x.to) add(now, { t: x.from, until: x.to, kind: 'split', text: `${name} is covering ${x.region}` });
         else if (nowMin < x.from) add(next, { t: x.from, until: x.to, kind: 'split', text: `${name} covers ${x.region}` });
       }
-      if (nowMin < e) add(next, { t: e, kind: 'end', text: `${name}'s shift ends` });
+      if (nowMin < e && !leftEarly) add(next, { t: e, kind: 'end', text: `${name}'s shift ends` });
     }
     // People from other regions covering the region being viewed.
     for (const { w, spans } of visits) {
@@ -1374,7 +1384,7 @@
         personRow(
           p.e,
           `<span class="tag approved">${p.partial ? esc(ptoHours(p.req)) : 'PTO'}</span>`,
-          sub(p.e, p.partial ? `Out ${esc(ptoHours(p.req))}${p.req.start !== p.req.end ? ` · ${esc(fmtRange(p.req.start, p.req.end))}` : ''}` : esc(fmtRange(p.req.start, p.req.end)))
+          sub(p.e, p.partial ? `${p.req.leaveAt ? '' : 'Out '}${esc(ptoHours(p.req))}${p.req.start !== p.req.end ? ` · ${esc(fmtRange(p.req.start, p.req.end))}` : ''}` : esc(fmtRange(p.req.start, p.req.end)))
         )
       ),
       ...pendingPto.map((x) => personRow(x.e, `<span class="tag pending">Pending</span>`, sub(x.e, esc(fmtRange(x.pending.start, x.pending.end))))),
@@ -1564,10 +1574,13 @@
     const n = daysBetween(a, b);
     const days = `${n} calendar day${n === 1 ? '' : 's'}`;
     const s = f.ptoStart.value, e = f.ptoEnd.value;
+    const each = n > 1 ? ` on each of ${n} days` : '';
+    if (!f.fullDay.checked && f.ptoMode.value === 'leave' && TIME_RE.test(s))
+      return ($('#pto-days-hint').textContent = `Leaving at ${fmtTime(s)}, out the rest of the shift${each}`);
     $('#pto-days-hint').textContent =
-      f.fullDay.checked || !TIME_RE.test(s) || !TIME_RE.test(e) || e <= s
+      f.fullDay.checked || f.ptoMode.value === 'leave' || !TIME_RE.test(s) || !TIME_RE.test(e) || e <= s
         ? days
-        : `${fmtTime(s)} – ${fmtTime(e)} (${+((toMin(e) - toMin(s)) / 60).toFixed(2)} hrs)${n > 1 ? ` on each of ${n} days` : ''}`;
+        : `${fmtTime(s)} – ${fmtTime(e)} (${+((toMin(e) - toMin(s)) / 60).toFixed(2)} hrs)${each}`;
   }
 
   function requestRow(p) {
@@ -2601,6 +2614,18 @@
       updatePtoHint();
     });
     $('#pto-times').addEventListener('change', updatePtoHint);
+    // "Leaving at" (out for the rest of their shift) or "From – to".
+    const setPtoMode = (mode) => {
+      pf.ptoMode.value = mode;
+      $$('#pto-mode button').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
+      $('#pto-start-label').textContent = mode === 'leave' ? 'Leaving at' : 'From';
+      $('#pto-end-wrap').hidden = mode === 'leave';
+      updatePtoHint();
+    };
+    $('#pto-mode').onclick = (ev) => {
+      const b = ev.target.closest('button');
+      if (b) setPtoMode(b.dataset.mode);
+    };
     pf.onsubmit = async (ev) => {
       ev.preventDefault();
       const body = { ...Object.fromEntries(new FormData(pf)), fullDay: pf.fullDay.checked };
@@ -2616,6 +2641,7 @@
         pf.start.value = pf.end.value = ymd(new Date());
         pf.end.min = pf.start.value;
         $('#pto-times').hidden = true;
+        setPtoMode('leave');
         S.selected = null;
         renderCalendar();
         updatePtoHint();
