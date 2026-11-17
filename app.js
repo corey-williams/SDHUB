@@ -1046,7 +1046,6 @@
     const checks = regionGaps(ds).filter((x) => S.region === 'all' || x.region === S.region);
     const gapMap = Object.fromEntries(checks.map((x) => [x.region, x.gaps]));
     const bad = checks.filter((x) => x.gaps.length);
-    const okRegions = checks.filter((x) => !x.gaps.length);
     // The graph's time range covers every shown region's coverage window.
     const win = checks.length ? { s: Math.min(...checks.map((x) => x.win.s)), e: Math.max(...checks.map((x) => x.win.e)) } : null;
     const tag = (r) => `<span class="rtag" style="--c:${REGION_COLORS[r]}">${esc(r)}</span>`;
@@ -1062,13 +1061,10 @@
           ${bad
             .map((x) => `<div class="cov-line">${tag(x.region)} ${x.gaps.map((g) => esc(fmtGap(g))).join(', ')}<span class="cov-hours">covers ${fmtWindow(x.win)}</span></div>`)
             .join('')}
-          ${okRegions.length ? `<span class="cov-sub">${okRegions.map((x) => `${esc(x.region)} fully covered (${fmtWindow(x.win)})`).join(' · ')}</span>` : ''}
         </div>`;
     } else {
-      cb.hidden = false;
-      cb.className = 'cov-banner ok';
-      cb.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12l5 5L20 7"/></svg>
-        <div>Full coverage · ${checks.map((x) => `${esc(x.region)} ${fmtWindow(x.win)}`).join(' · ')}</div>`;
+      // Fully covered: show nothing. The banner only appears when there's a gap.
+      cb.hidden = true;
     }
 
     renderTimeline(working, isToday, win, gapMap);
