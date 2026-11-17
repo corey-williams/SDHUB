@@ -624,6 +624,14 @@ body.is-supervisor .admin-only { display: none !important; }
 .team-group em { font-style: normal; font-size: 10.5px; font-weight: 650; letter-spacing: .03em; padding: 1px 6px; border-radius: 5px; background: var(--border); color: var(--muted); }
 .settings-grid > div, #pin-form { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 #pin-form .row2 { width: 100%; }
+#pin-form.setting-gap { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); width: 100%; }
+.role-list { display: flex; flex-direction: column; width: 100%; }
+.role-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); font-weight: 600; font-size: 13.5px; }
+.role-row:first-child { border-top: 0; }
+.role-row .muted { font-weight: 500; margin-left: auto; white-space: nowrap; }
+.role-row .btn { flex: none; }
+.role-add { display: flex; gap: 8px; width: 100%; }
+.role-add input { flex: 1; min-width: 0; }
 .note { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--border); }
 code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12.5px; background: var(--surface-2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 6px; }
 .banner {

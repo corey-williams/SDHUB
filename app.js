@@ -555,10 +555,15 @@
       return { on, start, end };
     });
   }
+  // Job titles offered in Edit employee (managed in Admin → Settings).
+  function roles() {
+    const list = S.data?.settings?.roles;
+    return Array.isArray(list) ? list : ROLES;
+  }
   function cleanEmployee(body, prevRole) {
     if (!REGIONS.includes(body.region)) throw new Error('Please choose a region');
-    // Roles come from the fixed list; an older free-text role is kept only if left unchanged.
-    if (!ROLES.includes(body.role) && !(prevRole && body.role === prevRole)) throw new Error('Please choose a role');
+    // Titles come from the list in Admin → Settings; a removed title is kept only if left unchanged.
+    if (!roles().includes(body.role) && !(prevRole && body.role === prevRole)) throw new Error('Please choose a title');
     return {
       name: str(body.name, 'Name', 60),
       role: body.role,
@@ -656,6 +661,9 @@
         coverage: normCoverage(d.settings?.coverage),
         regionCoverage: normRegionCoverage(d.settings?.regionCoverage, normCoverage(d.settings?.coverage)),
         holidays: normHolidays(d.settings?.holidays),
+        roles: Array.isArray(d.settings?.roles)
+          ? [...new Set(d.settings.roles.filter((r) => typeof r === 'string' && r.trim()).map((r) => r.trim().slice(0, 60)))]
+          : [...ROLES],
         keySalt: d.settings?.keySalt || null,
       },
       employees: Array.isArray(d.employees) ? d.employees : [],
@@ -1715,6 +1723,17 @@
           <label class="toggle" title="${hidden ? 'Hidden regions are not checked' : ''}"><input type="checkbox" data-cov-toggle="${esc(r)}" ${alertsOn(r) ? 'checked' : ''} ${hidden ? 'disabled' : ''} aria-label="Gap alerts for ${esc(r)}" /></label>
         </div>`;
       }).join('');
+
+    // Job titles offered in Edit employee.
+    $('#role-list').innerHTML = roles().length
+      ? roles()
+          .map((r) => {
+            const n = S.employees.filter((e) => e.role === r).length;
+            return `<div class="role-row"><span>${esc(r)}</span><span class="muted small">${n ? `${n} ${n === 1 ? 'person' : 'people'}` : ''}</span><button type="button" class="btn ghost icon xs" data-del-role="${esc(r)}" aria-label="Remove ${esc(r)}" title="Remove">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>`;
+          })
+          .join('')
+      : `<p class="muted small">No titles yet. Add one below.</p>`;
   }
 
   // ---------- Admin → Holidays ----------
@@ -1929,11 +1948,11 @@
     const f = $('#emp-form');
     $('#emp-dialog-title').textContent = e ? 'Edit employee' : 'Add employee';
     f.name.value = e ? e.name : '';
-    const legacyRole = e && e.role && !ROLES.includes(e.role) ? e.role : null;
+    const legacyRole = e && e.role && !roles().includes(e.role) ? e.role : null;
     f.role.innerHTML =
-      `<option value="" disabled>Choose a role…</option>` +
-      ROLES.map((r) => `<option value="${r}">${r}</option>`).join('') +
-      (legacyRole ? `<option value="${esc(legacyRole)}">${esc(legacyRole)} (old)</option>` : '');
+      `<option value="" disabled>Choose a title…</option>` +
+      roles().map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join('') +
+      (legacyRole ? `<option value="${esc(legacyRole)}">${esc(legacyRole)} (removed title)</option>` : '');
     f.role.value = e && e.role ? e.role : '';
     // Hidden regions aren't offered, unless this person is already in one.
     const choices = REGIONS.filter((r) => !isHidden(r) || (e && regionOf(e) === r));
@@ -2912,6 +2931,29 @@
       }, `${r} is now ${show ? 'shown' : 'hidden'}`).then((ok) => {
         if (!ok) ev.target.checked = !show;
       });
+    });
+
+    // job titles: add / remove
+    $('#role-form').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const name = ev.target.role.value.trim().replace(/\s+/g, ' ');
+      if (!name) return;
+      const ok = await mutate((d) => {
+        if (d.settings.roles.some((r) => r.toLowerCase() === name.toLowerCase())) throw new Error('That title is already in the list');
+        d.settings.roles.push(name.slice(0, 60));
+      }, `Added "${name}"`);
+      if (ok) ev.target.reset();
+    };
+    $('#role-list').addEventListener('click', async (ev) => {
+      const b = ev.target.closest('[data-del-role]');
+      if (!b) return;
+      const r = b.dataset.delRole;
+      const n = S.employees.filter((e) => e.role === r).length;
+      const msg = n
+        ? `${n} ${n === 1 ? 'person has' : 'people have'} this title and will keep it until you pick a new one in Edit employee.`
+        : 'It will no longer be offered in Edit employee.';
+      if (!(await confirmBox(`Remove "${r}"?`, msg, 'Remove'))) return;
+      mutate((d) => { d.settings.roles = d.settings.roles.filter((x) => x !== r); }, `Removed "${r}"`);
     });
 
     // change PIN

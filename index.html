@@ -282,14 +282,23 @@
                 <div id="region-toggles" class="region-toggles"></div>
                 <p class="muted small"><b>Show:</b> a hidden region and its people are left off the Home and PTO tabs, but stay listed here in Admin. <b>Gap alerts:</b> each region is checked on its own against the coverage hours.</p>
               </div>
-              <form id="pin-form" autocomplete="off">
-                <span class="label">Change admin PIN</span>
-                <div class="row2">
-                  <input type="password" name="newpin" placeholder="New PIN" required />
-                  <input type="password" name="confirmpin" placeholder="Confirm PIN" required />
-                </div>
-                <button class="btn ghost sm" type="submit">Update PIN</button>
-              </form>
+              <div>
+                <span class="label">Job titles</span>
+                <div id="role-list" class="role-list"></div>
+                <form id="role-form" class="role-add" autocomplete="off">
+                  <input name="role" maxlength="60" placeholder="New title" required />
+                  <button class="btn ghost sm" type="submit">Add</button>
+                </form>
+                <p class="muted small">The choices in <b>Edit employee</b>. Removing a title doesn't change anyone who already has it.</p>
+                <form id="pin-form" class="setting-gap" autocomplete="off">
+                  <span class="label">Change admin PIN</span>
+                  <div class="row2">
+                    <input type="password" name="newpin" placeholder="New PIN" required />
+                    <input type="password" name="confirmpin" placeholder="Confirm PIN" required />
+                  </div>
+                  <button class="btn ghost sm" type="submit">Update PIN</button>
+                </form>
+              </div>
             </div>
             <p class="muted small note">The PIN keeps admin buttons out of the way, but it isn't real security: anyone who can edit the shared folder can change <code>data.json</code>. Limit edit access to the folder if that matters.</p>
           </div>
@@ -309,7 +318,7 @@
       </div>
       <div class="row3">
         <label>Name <input name="name" required maxlength="60" placeholder="Full name" /></label>
-        <label>Role <select name="role" required></select></label>
+        <label>Title <select name="role" required></select></label>
         <label>Region <select name="region" required></select></label>
       </div>
       <div class="field info-field">
