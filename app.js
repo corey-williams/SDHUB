@@ -3046,7 +3046,8 @@
   // worker so Edge/Chrome can install the site as an app. Installed apps keep
   // folder access permanently, so people aren't asked again every visit.
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    // updateViaCache: 'none' = always check GitHub for a newer sw.js too.
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
   }
 
   async function boot() {
