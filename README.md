@@ -43,7 +43,9 @@ The service desk's team calendar, schedules and PTO.
     - **Add holiday** / **Edit**: same date every year, a weekday pattern (e.g. 4th Thursday of November, last Monday of May) or one time only, as a **Full day** or a **Half day** with a closing time.
     - Holidays show first on that day in the PTO calendar, and Home shows a holiday banner. On a full holiday nobody is scheduled (use **Add shift** if someone needs to work) and coverage isn't checked. On a half day, shifts and coverage end at closing time.
   - **Settings → Job titles:** add or remove the titles offered in **Edit employee** (each shows how many people have it), and drag them by the dotted handle to set the order they appear in the dropdown. Removing a title doesn't change anyone who has it; their edit window shows it as "(removed title)" until you pick a new one.
-  - **Settings → Regions:** show or hide each region. Emplify starts hidden. A hidden region and everyone in it are left off the Home and PTO tabs, including "All regions". They still show in Admin, so nothing is lost when the region is turned back on.
+  - **Settings → Regions:** add a region (it gets its own color), drag regions to set their order on Home, PTO and Admin, or remove one with **×**. A region can only be removed once nobody is in it; removing it also removes its coverage hours and any split shifts covering it.
+  - **Admin PIN:** its own card at the bottom of Admin.
+  - **Showing and hiding regions:** show or hide each region. Emplify starts hidden. A hidden region and everyone in it are left off the Home and PTO tabs, including "All regions". They still show in Admin, so nothing is lost when the region is turned back on.
 
 ## Files
 

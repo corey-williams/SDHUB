@@ -9,9 +9,36 @@
   const POLL_MS = 5000;
   const DEFAULT_PIN = '1234';
 
-  const REGIONS = ['Bellin', 'Gundersen', 'Research', 'Emplify'];
+  // Regions are managed in Admin → Settings and stored in data.json as
+  // settings.regions [{ name, color }]. REGIONS and REGION_COLORS are kept in
+  // sync with the file by setRegions() (updated in place).
+  const DEFAULT_REGIONS = [
+    { name: 'Bellin', color: '#0d9488' },
+    { name: 'Gundersen', color: '#2563eb' },
+    { name: 'Research', color: '#ea580c' },
+    { name: 'Emplify', color: '#7c3aed' },
+  ];
+  const REGION_PALETTE = ['#0d9488', '#2563eb', '#ea580c', '#7c3aed', '#db2777', '#65a30d', '#0891b2', '#ca8a04', '#dc2626', '#4f46e5'];
+  const REGIONS = DEFAULT_REGIONS.map((r) => r.name);
   const ROLES = ['IT Support Technician Associate', 'IT Support Technician', 'IT Support Technician Senior'];
-  const REGION_COLORS = { Bellin: '#0d9488', Gundersen: '#2563eb', Research: '#ea580c', Emplify: '#7c3aed', '': '#94a3b8' };
+  const REGION_COLORS = { '': '#94a3b8' };
+  DEFAULT_REGIONS.forEach((r) => (REGION_COLORS[r.name] = r.color));
+  function normRegions(list) {
+    if (!Array.isArray(list)) return DEFAULT_REGIONS.map((r) => ({ ...r }));
+    const seen = new Set();
+    return list
+      .filter((r) => r && typeof r.name === 'string' && r.name.trim())
+      .map((r, i) => ({ name: r.name.trim().slice(0, 30), color: /^#[0-9a-f]{6}$/i.test(r.color || '') ? r.color : REGION_PALETTE[i % REGION_PALETTE.length] }))
+      .filter((r) => !seen.has(r.name) && seen.add(r.name));
+  }
+  function setRegions(list) {
+    REGIONS.length = 0;
+    for (const k of Object.keys(REGION_COLORS)) if (k) delete REGION_COLORS[k];
+    for (const r of list) {
+      REGIONS.push(r.name);
+      REGION_COLORS[r.name] = r.color;
+    }
+  }
 
   // ---------- state ----------
   const S = {
@@ -383,6 +410,8 @@
   function busySpans(e, dateStr, shift) {
     return [...meetingSpans(e, dateStr, shift), ...breakSpans(e, shift), ...ptoSpans(e, dateStr, shift)];
   }
+  const GRIP_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>`;
+  const X_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
   // Fork and knife, used for lunch on the shift bars and in the Events feed.
   const LUNCH_ICON = `<svg class="lunch-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 2v6a3 3 0 0 0 6 0V2"/><path d="M8 2v20"/><path d="M19 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>`;
   // Pause symbol, used for breaks on the shift bars.
@@ -656,9 +685,13 @@
   }
   function normalize(d) {
     if (!d || typeof d !== 'object') throw new Error('not an object');
+    // The region list comes first: everything below is checked against it.
+    const regions = normRegions(d.settings?.regions);
+    setRegions(regions);
     return {
       version: 1,
       settings: {
+        regions,
         adminPinHash: d.settings?.adminPinHash || null,
         hiddenRegions: Array.isArray(d.settings?.hiddenRegions) ? d.settings.hiddenRegions.filter((r) => REGIONS.includes(r)) : [],
         splitShifts: !!d.settings?.splitShifts,
@@ -748,6 +781,7 @@
 
   function applyData(data, lastModified) {
     S.data = data;
+    setRegions(data.settings.regions);
     S.employees = data.employees;
     S.pto = data.pto;
     S.overrides = data.overrides;
@@ -1718,14 +1752,16 @@
 
     // Regions table: show/hide, and per-region coverage gap alerts.
     $('#region-toggles').innerHTML =
-      `<div class="rt-row rt-head"><span>Region</span><span>Show</span><span>Gap alerts</span></div>` +
+      `<div class="rt-row rt-head"><span>Region</span><span>Show</span><span>Gap alerts</span><span></span></div>` +
       REGIONS.map((r) => {
         const n = S.employees.filter((e) => regionOf(e) === r).length;
         const hidden = isHidden(r);
-        return `<div class="rt-row">
-          <span class="rt-name"><i style="--c:${REGION_COLORS[r]}"></i>${esc(r)}<span class="muted small">${n} ${n === 1 ? 'person' : 'people'}</span></span>
+        const delTip = n ? `Move the ${n === 1 ? 'person' : `${n} people`} in ${r} to another region first` : `Remove ${r}`;
+        return `<div class="rt-row" draggable="true" data-region-row="${esc(r)}">
+          <span class="rt-name"><span class="drag-handle" title="Drag to reorder" aria-hidden="true">${GRIP_ICON}</span><i style="--c:${REGION_COLORS[r]}"></i>${esc(r)}<span class="muted small">${n} ${n === 1 ? 'person' : 'people'}</span></span>
           <label class="toggle"><input type="checkbox" data-region-toggle="${esc(r)}" ${hidden ? '' : 'checked'} aria-label="Show ${esc(r)}" /></label>
           <label class="toggle" title="${hidden ? 'Hidden regions are not checked' : ''}"><input type="checkbox" data-cov-toggle="${esc(r)}" ${alertsOn(r) ? 'checked' : ''} ${hidden ? 'disabled' : ''} aria-label="Gap alerts for ${esc(r)}" /></label>
+          <button type="button" class="btn ghost icon xs" data-del-region="${esc(r)}" aria-label="Remove ${esc(r)}" title="${esc(delTip)}">${X_ICON}</button>
         </div>`;
       }).join('');
 
@@ -1734,7 +1770,7 @@
       ? roles()
           .map((r) => {
             const n = S.employees.filter((e) => e.role === r).length;
-            return `<div class="role-row" draggable="true" data-role="${esc(r)}"><span class="drag-handle" title="Drag to reorder" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span><span>${esc(r)}</span><span class="muted small">${n ? `${n} ${n === 1 ? 'person' : 'people'}` : ''}</span><button type="button" class="btn ghost icon xs" data-del-role="${esc(r)}" aria-label="Remove ${esc(r)}" title="Remove">
+            return `<div class="role-row" draggable="true" data-role="${esc(r)}"><span class="drag-handle" title="Drag to reorder" aria-hidden="true">${GRIP_ICON}</span><span>${esc(r)}</span><span class="muted small">${n ? `${n} ${n === 1 ? 'person' : 'people'}` : ''}</span><button type="button" class="btn ghost icon xs" data-del-role="${esc(r)}" aria-label="Remove ${esc(r)}" title="Remove">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>`;
           })
           .join('')
@@ -2961,38 +2997,47 @@
       mutate((d) => { d.settings.roles = d.settings.roles.filter((x) => x !== r); }, `Removed "${r}"`);
     });
 
-    // job titles: drag a row to reorder (the order is the dropdown order)
-    const rl = $('#role-list');
-    let dragRole = null;
-    const clearDrop = () => $$('.role-row', rl).forEach((x) => x.classList.remove('drop-before', 'drop-after', 'dragging'));
-    rl.addEventListener('dragstart', (ev) => {
-      const row = ev.target.closest('.role-row');
-      if (!row) return;
-      dragRole = row.dataset.role;
-      row.classList.add('dragging');
-      ev.dataTransfer.effectAllowed = 'move';
-      ev.dataTransfer.setData('text/plain', dragRole);
-    });
-    rl.addEventListener('dragover', (ev) => {
-      const row = ev.target.closest('.role-row');
-      if (!dragRole || !row) return;
-      ev.preventDefault();
-      const after = ev.clientY > row.getBoundingClientRect().top + row.offsetHeight / 2;
-      $$('.role-row', rl).forEach((x) => x.classList.remove('drop-before', 'drop-after'));
-      if (row.dataset.role !== dragRole) row.classList.add(after ? 'drop-after' : 'drop-before');
-    });
-    rl.addEventListener('dragend', () => { dragRole = null; clearDrop(); });
-    rl.addEventListener('drop', (ev) => {
-      ev.preventDefault();
-      const row = ev.target.closest('.role-row');
-      const from = dragRole;
-      const after = row?.classList.contains('drop-after');
-      dragRole = null;
-      clearDrop();
-      if (!row || !from || row.dataset.role === from) return;
-      const target = row.dataset.role;
-      const order = roles().filter((r) => r !== from);
+    // Drag rows to reorder a list. key(row) names the row; onMove(from, target, after) saves it.
+    function sortable(list, rowSel, key, onMove) {
+      let from = null;
+      const rows = () => $$(rowSel, list);
+      const clear = () => rows().forEach((x) => x.classList.remove('drop-before', 'drop-after', 'dragging'));
+      list.addEventListener('dragstart', (ev) => {
+        const row = ev.target.closest?.(rowSel);
+        if (!row) return;
+        from = key(row);
+        row.classList.add('dragging');
+        ev.dataTransfer.effectAllowed = 'move';
+        ev.dataTransfer.setData('text/plain', from);
+      });
+      list.addEventListener('dragover', (ev) => {
+        const row = ev.target.closest?.(rowSel);
+        if (from == null || !row) return;
+        ev.preventDefault();
+        const after = ev.clientY > row.getBoundingClientRect().top + row.offsetHeight / 2;
+        rows().forEach((x) => x.classList.remove('drop-before', 'drop-after'));
+        if (key(row) !== from) row.classList.add(after ? 'drop-after' : 'drop-before');
+      });
+      list.addEventListener('dragend', () => { from = null; clear(); });
+      list.addEventListener('drop', (ev) => {
+        ev.preventDefault();
+        const row = ev.target.closest?.(rowSel);
+        const src = from;
+        const after = row?.classList.contains('drop-after');
+        from = null;
+        clear();
+        if (row && src != null && key(row) !== src) onMove(src, key(row), after);
+      });
+    }
+    const moved = (list, from, target, after) => {
+      const order = list.filter((x) => x !== from);
       order.splice(order.indexOf(target) + (after ? 1 : 0), 0, from);
+      return order;
+    };
+
+    // job titles: drag to reorder (the order is the dropdown order)
+    sortable($('#role-list'), '.role-row', (row) => row.dataset.role, (from, target, after) => {
+      const order = moved(roles(), from, target, after);
       // Show the new order right away, then save it.
       S.data.settings.roles = order;
       renderAdmin();
@@ -3000,6 +3045,53 @@
         const rest = d.settings.roles.filter((r) => !order.includes(r)); // added by someone else meanwhile
         d.settings.roles = [...order.filter((r) => d.settings.roles.includes(r)), ...rest];
       }, 'Order saved');
+    });
+
+    // regions: drag to reorder (the order of the region buttons and groups)
+    sortable($('#region-toggles'), '.rt-row[data-region-row]', (row) => row.dataset.regionRow, (from, target, after) => {
+      const order = moved([...REGIONS], from, target, after);
+      const byName = (list) => order.map((n) => list.find((r) => r.name === n)).filter(Boolean);
+      S.data.settings.regions = byName(S.data.settings.regions);
+      setRegions(S.data.settings.regions);
+      renderAll();
+      mutate((d) => {
+        const rest = d.settings.regions.filter((r) => !order.includes(r.name));
+        d.settings.regions = [...byName(d.settings.regions), ...rest];
+      }, 'Order saved');
+    });
+
+    // regions: add / remove
+    $('#region-form').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const name = ev.target.region.value.trim().replace(/\s+/g, ' ').slice(0, 30);
+      if (!name) return;
+      if (/^(all|all regions|unassigned)$/i.test(name)) return toast('Please choose a different name', true);
+      const ok = await mutate((d) => {
+        if (d.settings.regions.some((r) => r.name.toLowerCase() === name.toLowerCase())) throw new Error('That region already exists');
+        const used = new Set(d.settings.regions.map((r) => r.color));
+        const color = REGION_PALETTE.find((c) => !used.has(c)) || REGION_PALETTE[d.settings.regions.length % REGION_PALETTE.length];
+        d.settings.regions.push({ name, color });
+      }, `Added ${name}`);
+      if (ok) ev.target.reset();
+    };
+    $('#region-toggles').addEventListener('click', async (ev) => {
+      const b = ev.target.closest('[data-del-region]');
+      if (!b) return;
+      const r = b.dataset.delRegion;
+      const n = S.employees.filter((e) => regionOf(e) === r).length;
+      if (n) return toast(`Move the ${n === 1 ? 'person' : `${n} people`} in ${r} to another region first (Edit employee)`, true);
+      if (REGIONS.length <= 1) return toast('Keep at least one region', true);
+      const splits = S.splits.filter((sp) => sp.region === r).length;
+      const msg = `Its coverage hours and settings are removed${splits ? `, along with ${splits} split shift${splits === 1 ? '' : 's'} covering it` : ''}. You can add it again later.`;
+      if (!(await confirmBox(`Remove ${r}?`, msg, 'Remove'))) return;
+      mutate((d) => {
+        if (d.employees.some((e) => e.region === r)) throw new Error(`Someone was just added to ${r}; move them first`);
+        d.settings.regions = d.settings.regions.filter((x) => x.name !== r);
+        d.settings.hiddenRegions = d.settings.hiddenRegions.filter((x) => x !== r);
+        d.settings.coverageOff = d.settings.coverageOff.filter((x) => x !== r);
+        delete d.settings.regionCoverage[r];
+        d.splits = d.splits.filter((sp) => sp.region !== r);
+      }, `Removed ${r}`);
     });
 
     // change PIN

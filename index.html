@@ -280,7 +280,11 @@
               <div>
                 <span class="label">Regions</span>
                 <div id="region-toggles" class="region-toggles"></div>
-                <p class="muted small"><b>Show:</b> a hidden region and its people are left off the Home and PTO tabs, but stay listed here in Admin. <b>Gap alerts:</b> each region is checked on its own against the coverage hours.</p>
+                <form id="region-form" class="role-add" autocomplete="off">
+                  <input name="region" maxlength="30" placeholder="New region" required />
+                  <button class="btn ghost sm" type="submit">Add</button>
+                </form>
+                <p class="muted small"><b>Show:</b> a hidden region and its people are left off the Home and PTO tabs, but stay listed here in Admin. <b>Gap alerts:</b> each region is checked on its own against the coverage hours. Drag to change the order. A region can be removed once nobody is in it.</p>
               </div>
               <div>
                 <span class="label">Job titles</span>
@@ -290,17 +294,19 @@
                   <button class="btn ghost sm" type="submit">Add</button>
                 </form>
                 <p class="muted small">The choices in <b>Edit employee</b>. Removing a title doesn't change anyone who already has it.</p>
-                <form id="pin-form" class="setting-gap" autocomplete="off">
-                  <span class="label">Change admin PIN</span>
-                  <div class="row2">
-                    <input type="password" name="newpin" placeholder="New PIN" required />
-                    <input type="password" name="confirmpin" placeholder="Confirm PIN" required />
-                  </div>
-                  <button class="btn ghost sm" type="submit">Update PIN</button>
-                </form>
               </div>
             </div>
-            <p class="muted small note">The PIN keeps admin buttons out of the way, but it isn't real security: anyone who can edit the shared folder can change <code>data.json</code>. Limit edit access to the folder if that matters.</p>
+          </div>
+          <div class="card pin-card admin-only">
+            <div class="card-head"><h2>Admin PIN</h2></div>
+            <form id="pin-form" autocomplete="off">
+              <div class="pin-row">
+                <input type="password" name="newpin" placeholder="New PIN" required />
+                <input type="password" name="confirmpin" placeholder="Confirm PIN" required />
+                <button class="btn ghost sm" type="submit">Update PIN</button>
+              </div>
+            </form>
+            <p class="muted small note">The PIN keeps admin buttons out of the way, but it isn't real security: anyone who can edit the shared folder can change <code>data.json</code>. Limit edit access to the folder if that matters. Changing it re-encrypts all supervisor PINs automatically.</p>
           </div>
         </div>
       </div>
