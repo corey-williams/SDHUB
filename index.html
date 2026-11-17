@@ -260,6 +260,9 @@
                 <span class="label">Shared data file</span>
                 <p class="muted small"><code id="folder-name"></code></p>
                 <button class="btn ghost sm" id="switch-folder">Switch folder</button>
+                <span class="label setting-gap">Split shifts</span>
+                <label class="toggle"><input type="checkbox" id="split-toggle" /> Allow split shifts</label>
+                <p class="muted small">Lets admins and supervisors move part of someone's shift to another region from <b>Adjust hours</b> on the Home tab.</p>
               </div>
               <div>
                 <span class="label">Regions</span>
@@ -398,6 +401,10 @@
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       Adjust hours
     </button>
+    <button type="button" data-act="split">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4v6a4 4 0 0 0 4 4h6"/><path d="M7 10v10"/><path d="M14 11l3 3-3 3"/></svg>
+      Split shift
+    </button>
   </div>
 
   <!-- Meeting block -->
@@ -499,26 +506,61 @@
         </button>
       </div>
       <p class="muted small" id="ovr-usual"></p>
-      <div class="row2">
-        <label>From <input type="date" name="start" required /></label>
-        <label>To <input type="date" name="end" required /></label>
+      <div class="seg" id="ovr-mode" hidden>
+        <button type="button" data-mode="hours" class="on">Change hours</button>
+        <button type="button" data-mode="split">Split shift</button>
       </div>
-      <div class="row2">
-        <label>Start time <input type="time" name="startTime" step="900" required /></label>
-        <label>End time <input type="time" name="endTime" step="900" required /></label>
+
+      <!-- Change hours -->
+      <div class="ovr-section" id="ovr-hours">
+        <div class="row2">
+          <label>From <input type="date" name="start" /></label>
+          <label>To <input type="date" name="end" /></label>
+        </div>
+        <div class="row2">
+          <label>Start time <input type="time" name="startTime" step="900" /></label>
+          <label>End time <input type="time" name="endTime" step="900" /></label>
+        </div>
+        <label>Note <span class="muted small">(optional)</span>
+          <input name="note" maxlength="120" placeholder="e.g. Training, covering late shift" />
+        </label>
+        <label class="toggle"><input type="checkbox" name="allDays" /> Include their regular days off</label>
+        <p class="muted small" id="ovr-hint"></p>
+        <div class="banner small-banner" id="ovr-existing" hidden>
+          <span id="ovr-existing-text"></span>
+          <button type="button" class="btn ghost sm" id="ovr-remove">Remove adjustment</button>
+        </div>
       </div>
-      <label>Note <span class="muted small">(optional)</span>
-        <input name="note" maxlength="120" placeholder="e.g. Training, covering late shift" />
-      </label>
-      <label class="toggle"><input type="checkbox" name="allDays" /> Include their regular days off</label>
-      <p class="muted small" id="ovr-hint"></p>
-      <div class="banner small-banner" id="ovr-existing" hidden>
-        <span id="ovr-existing-text"></span>
-        <button type="button" class="btn ghost sm" id="ovr-remove">Remove adjustment</button>
+
+      <!-- Split shift: part of the shift is worked for another region -->
+      <div class="ovr-section" id="ovr-split" hidden>
+        <p class="muted small" id="split-intro"></p>
+        <div class="row2">
+          <label><span class="lbl">Covering region</span><select name="splitRegion"></select></label>
+          <label><span class="lbl">Starting</span><input type="date" name="splitDate" /></label>
+        </div>
+        <div class="row2">
+          <label><span class="lbl">From</span><input type="time" name="splitStart" step="900" /></label>
+          <label><span class="lbl">To</span><input type="time" name="splitEnd" step="900" /></label>
+        </div>
+        <div class="row2">
+          <label><span class="lbl">Repeats</span><select name="splitRepeat"></select></label>
+          <label id="split-until-wrap"><span class="lbl">Until <span class="muted small">(optional)</span></span><input type="date" name="splitUntil" /></label>
+        </div>
+        <div class="mtg-scope" id="split-scope" hidden>
+          <span class="lbl">This is a repeating split. Changes and Remove apply to:</span>
+          <div class="seg" id="split-scope-seg">
+            <button type="button" data-scope="one" class="on">This day only</button>
+            <button type="button" data-scope="all">Every day in the series</button>
+          </div>
+        </div>
       </div>
+
       <div class="dialog-foot">
+        <button type="button" class="btn ghost danger-text" id="split-delete" hidden>Remove split</button>
+        <span class="spacer"></span>
         <button type="button" class="btn ghost" data-close>Cancel</button>
-        <button type="submit" class="btn primary">Save hours</button>
+        <button type="submit" class="btn primary" id="ovr-save">Save hours</button>
       </div>
     </form>
   </dialog>

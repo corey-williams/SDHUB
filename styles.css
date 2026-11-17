@@ -532,6 +532,21 @@ body.is-supervisor .admin-only { display: none !important; }
 .ev-end::before { background: #b4b8c9; }
 .ev-break::before, .ev-lunch::before { background: repeating-linear-gradient(180deg, #b8bccb 0 3px, #e5e7ef 3px 6px); }
 .ev-meeting::before { background: var(--warn); }
+.ev-split::before { background: var(--accent); }
+
+/* Split shifts on the Home graph */
+.split {
+  position: absolute; top: 0; bottom: 0; z-index: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 0 4px;
+  background: color-mix(in srgb, var(--r) 22%, white); border-left: 3px solid var(--r);
+  color: color-mix(in srgb, var(--r) 75%, black); font-size: 10.5px; font-weight: 700; white-space: nowrap;
+}
+.split span { overflow: hidden; text-overflow: ellipsis; }
+.tl-bar.visit { background: var(--surface); border: 1.5px dashed var(--c); border-left: 3px solid var(--c); color: color-mix(in srgb, var(--c) 72%, black); }
+.tl-visit .tl-sub { color: var(--accent); font-weight: 600; }
+.setting-gap { margin-top: 14px; }
+.ovr-section { display: flex; flex-direction: column; gap: 14px; }
+#ovr-mode { align-self: flex-start; }
 .ev-text { font-size: 13px; font-weight: 550; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ev-when { text-align: right; font-size: 12.5px; font-weight: 650; white-space: nowrap; }
 .ev-when small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }

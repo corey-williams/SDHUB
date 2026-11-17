@@ -20,6 +20,7 @@
     pto: [],
     overrides: [],
     meetings: [],
+    splits: [],
     admin: false, // set by setRole() at boot
     role: null,
     supId: null,
@@ -291,6 +292,37 @@
     return false;
   }
 
+  // ---------- split shifts ----------
+  // A split moves part of someone's shift to another region:
+  // { id, employeeId, region, date, startTime, endTime, repeat, until, skip }
+  // (repeat/until/skip work like recurring meetings). Only used when the
+  // admin has switched split shifts on.
+  function splitsEnabled() {
+    return !!S.data?.settings.splitShifts;
+  }
+  function splitSpans(e, dateStr, shift) {
+    if (!splitsEnabled() || !shift?.on) return [];
+    const s = toMin(shift.start), end = shiftEndMin(shift);
+    return S.splits
+      .filter((sp) => sp.employeeId === e.id && sp.region !== regionOf(e) && occursOn(sp, dateStr))
+      .map((sp) => {
+        let a = toMin(sp.startTime), b = toMin(sp.endTime);
+        if (a < s && a + 1440 < end) a += 1440;
+        while (b <= a) b += 1440;
+        return { sp, region: sp.region, from: Math.max(a, s), to: Math.min(b, end) };
+      })
+      .filter((x) => x.to > x.from)
+      .sort((x, y) => x.from - y.from);
+  }
+  // People from other regions covering `region` on a date: [{ w, spans }].
+  function visitorsFor(region, dateStr) {
+    if (!splitsEnabled()) return [];
+    return dayStatus(dateStr)
+      .working.filter((w) => visibleEmp(w.e) && regionOf(w.e) !== region)
+      .map((w) => ({ w, spans: splitSpans(w.e, dateStr, w.shift).filter((x) => x.region === region) }))
+      .filter((v) => v.spans.length);
+  }
+
   // Meetings for one person on one day, as minute spans inside their shift
   // (handles shifts that run past midnight).
   function meetingSpans(e, dateStr, shift) {
@@ -414,9 +446,14 @@
   function coverageGaps(dateStr, region) {
     const win = coverageWindow(dateStr, region);
     if (!win || !S.employees.some((e) => regionOf(e) === region)) return [];
-    const people = dayStatus(dateStr)
-      .working.filter((w) => regionOf(w.e) === region)
-      .map((w) => ({ s: toMin(w.shift.start), e: shiftEndMin(w.shift), busy: busySpans(w.e, dateStr, w.shift) }));
+    // The region's own people (minus time split out to other regions), plus
+    // people from other regions during the time they're covering this one.
+    const people = [
+      ...dayStatus(dateStr)
+        .working.filter((w) => regionOf(w.e) === region)
+        .map((w) => ({ s: toMin(w.shift.start), e: shiftEndMin(w.shift), busy: [...busySpans(w.e, dateStr, w.shift), ...splitSpans(w.e, dateStr, w.shift)] })),
+      ...visitorsFor(region, dateStr).flatMap(({ w, spans }) => spans.map((x) => ({ s: x.from, e: x.to, busy: busySpans(w.e, dateStr, w.shift) }))),
+    ];
     const STEP = 5;
     const gaps = [];
     for (let t = win.s; t < win.e; t += STEP) {
@@ -574,6 +611,7 @@
       settings: {
         adminPinHash: d.settings?.adminPinHash || null,
         hiddenRegions: Array.isArray(d.settings?.hiddenRegions) ? d.settings.hiddenRegions.filter((r) => REGIONS.includes(r)) : [],
+        splitShifts: !!d.settings?.splitShifts,
         coverageOff: Array.isArray(d.settings?.coverageOff) ? d.settings.coverageOff.filter((r) => REGIONS.includes(r)) : [],
         coverage: normCoverage(d.settings?.coverage),
         regionCoverage: normRegionCoverage(d.settings?.regionCoverage, normCoverage(d.settings?.coverage)),
@@ -584,6 +622,7 @@
       pto: Array.isArray(d.pto) ? d.pto : [],
       overrides: Array.isArray(d.overrides) ? d.overrides : [],
       meetings: Array.isArray(d.meetings) ? d.meetings : [],
+      splits: Array.isArray(d.splits) ? d.splits : [],
       updatedAt: d.updatedAt || null,
     };
   }
@@ -603,7 +642,7 @@
         ]
       : [];
     // Emplify starts hidden; an admin can show it under Admin → Settings.
-    return { version: 1, settings: { adminPinHash: await sha256(DEFAULT_PIN), hiddenRegions: ['Emplify'], coverage: defaultCoverage(), regionCoverage: normRegionCoverage(null, defaultCoverage()), holidays: normHolidays(null) }, employees, pto: [], overrides: [], meetings: [], updatedAt: new Date().toISOString() };
+    return { version: 1, settings: { adminPinHash: await sha256(DEFAULT_PIN), hiddenRegions: ['Emplify'], coverage: defaultCoverage(), regionCoverage: normRegionCoverage(null, defaultCoverage()), holidays: normHolidays(null) }, employees, pto: [], overrides: [], meetings: [], splits: [], updatedAt: new Date().toISOString() };
   }
 
   // ---------- remembered folder (IndexedDB) ----------
@@ -660,6 +699,7 @@
     S.pto = data.pto;
     S.overrides = data.overrides;
     S.meetings = data.meetings;
+    S.splits = data.splits;
     S.lastModified = lastModified;
   }
 
@@ -1043,14 +1083,20 @@
       el.innerHTML = `<div class="empty-big">No team members yet. Add people from the <a href="#admin">Admin</a> tab.</div>`;
       return;
     }
-    if (!working.length) {
+    // People from other regions covering the region(s) shown, by region.
+    const visitRegions = S.region === 'all' ? regionGroups() : [S.region];
+    const visitors = Object.fromEntries(visitRegions.map((r) => [r, visitorsFor(r, S.homeDate)]));
+    const allVisits = S.region === 'all' ? [] : visitors[S.region] || [];
+    if (!working.length && !allVisits.length) {
       el.innerHTML = `<div class="empty-big">Nobody is scheduled${where} on this day.</div>`;
       return;
     }
 
     // Axis: from the earliest start to the latest finish, at least 8 hours wide.
-    let a = Math.floor(Math.min(...working.map((w) => toMin(w.shift.start))) / 60);
-    let b = Math.ceil(Math.max(...working.map((w) => shiftEndMin(w.shift))) / 60);
+    const starts = [...working.map((w) => toMin(w.shift.start)), ...allVisits.flatMap((v) => v.spans.map((x) => x.from))];
+    const ends = [...working.map((w) => shiftEndMin(w.shift)), ...allVisits.flatMap((v) => v.spans.map((x) => x.to))];
+    let a = Math.floor(Math.min(...starts) / 60);
+    let b = Math.ceil(Math.max(...ends) / 60);
     // Always show the full coverage window so gaps at either end are visible.
     if (win) {
       a = Math.min(a, Math.floor(win.s / 60));
@@ -1091,8 +1137,19 @@
             `<div class="brk ${b.kind}" style="left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="${b.label}: ${esc(fmtBreak(b))}">${b.kind === 'lunch' ? LUNCH_ICON : BREAK_ICON}</div>`
         )
         .join('');
+      // Split shift: the part worked for another region, in that region's color.
+      const splits = splitSpans(w.e, S.homeDate, w.shift);
+      const splitBlocks = splits
+        .map(
+          ({ sp, region, from, to }) =>
+            `<div class="split" data-split="${sp.id}" style="--r:${REGION_COLORS[region]};left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="Covering ${esc(region)}: ${minToTime(from)} – ${minToTime(to)}${
+              sp.repeat !== 'none' ? ` (${sp.repeat === 'daily' ? 'every day' : 'every week'})` : ''
+            }${S.admin ? '\nClick to change' : ''}"><span>${sp.repeat !== 'none' ? '↻ ' : ''}${esc(region)}</span></div>`
+        )
+        .join('');
       const tip =
         `${w.e.name}: ${label}` +
+        splits.map((x) => `\nCovering ${x.region}: ${minToTime(x.from)} – ${minToTime(x.to)}`).join('') +
         brks.map(({ b }) => `\n${b.label}: ${fmtBreak(b)}`).join('') +
         (o ? ` (${w.shift.extra ? 'extra shift' : 'adjusted'}${o.note ? ': ' + o.note : ''})` : '') +
         (w.pending ? ' (PTO pending)' : '') +
@@ -1100,7 +1157,22 @@
         `\nClick to ${S.admin ? 'add a meeting block or adjust hours' : 'add a meeting block'}`;
       return `<div class="tl-row">
         <div class="tl-who">${avatar(w.e, 'sm')}<div class="tl-names"><div class="tl-name">${esc(w.e.name)}</div><div class="tl-sub">${esc(o?.note || w.e.role || '')}</div></div></div>
-        <div class="tl-track"><div class="${cls}" data-emp="${w.e.id}" style="--c:${w.e.color};left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(tip)}"><span>${label}${o ? ` <em>${w.shift.extra ? 'extra shift' : 'adjusted'}</em>` : ''}</span>${brkBlocks}${blocks}</div></div>
+        <div class="tl-track"><div class="${cls}" data-emp="${w.e.id}" style="--c:${w.e.color};left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(tip)}"><span>${label}${o ? ` <em>${w.shift.extra ? 'extra shift' : 'adjusted'}</em>` : ''}</span>${splitBlocks}${brkBlocks}${blocks}</div></div>
+      </div>`;
+    };
+    // Someone from another region shown in the region they're covering: a bar
+    // for just the covering window(s).
+    const visitRow = ({ w, spans }) => {
+      const home = regionLabel(regionOf(w.e));
+      const bars = spans
+        .map(
+          (x) =>
+            `<div class="tl-bar visit" style="--c:${w.e.color};--r:${REGION_COLORS[regionOf(w.e)]};left:${pct(x.from)}%;width:${pct(x.to) - pct(x.from)}%" title="${esc(w.e.name)} from ${esc(home)} covering ${esc(x.region)}: ${minToTime(x.from)} – ${minToTime(x.to)}"><span>${minToTime(x.from)} – ${minToTime(x.to)}</span></div>`
+        )
+        .join('');
+      return `<div class="tl-row tl-visit">
+        <div class="tl-who">${avatar(w.e, 'sm')}<div class="tl-names"><div class="tl-name">${esc(w.e.name)}</div><div class="tl-sub">Covering from ${esc(home)}</div></div></div>
+        <div class="tl-track">${bars}</div>
       </div>`;
     };
     const byStart = (x, y) => toMin(x.shift.start) - toMin(y.shift.start) || x.e.name.localeCompare(y.e.name);
@@ -1113,21 +1185,33 @@
     if (S.region === 'all') {
       for (const r of regionGroups()) {
         const list = working.filter((w) => regionOf(w.e) === r).sort(byStart);
+        const vis = visitors[r] || [];
         const gaps = gapMap[r] || [];
-        if (!list.length && !gaps.length) continue;
-        body += `<div class="tl-group"><i style="--c:${REGION_COLORS[r]}"></i>${esc(regionLabel(r))}<span>${list.length} working</span></div>
+        if (!list.length && !vis.length && !gaps.length) continue;
+        body += `<div class="tl-group"><i style="--c:${REGION_COLORS[r]}"></i>${esc(regionLabel(r))}<span>${list.length} working${vis.length ? ` · ${vis.length} covering` : ''}</span></div>
         <div class="tl-groupbox">
-          ${list.length ? list.map(row).join('') : `<div class="tl-row"><div class="tl-who"><span class="muted small">Nobody scheduled</span></div><div class="tl-track"></div></div>`}
+          ${list.length ? list.map(row).join('') : vis.length ? '' : `<div class="tl-row"><div class="tl-who"><span class="muted small">Nobody scheduled</span></div><div class="tl-track"></div></div>`}
+          ${vis.map(visitRow).join('')}
           ${gapEls(gaps)}
         </div>`;
       }
     } else {
-      body = `<div class="tl-groupbox">${[...working].sort(byStart).map(row).join('')}${gapEls(gapMap[S.region])}</div>`;
+      body = `<div class="tl-groupbox">${[...working].sort(byStart).map(row).join('')}${allVisits.map(visitRow).join('')}${gapEls(gapMap[S.region])}</div>`;
     }
 
     // Coverage: how many people are available during each hour. Someone counts
-    // if any 15 minutes of that hour are on shift and not in a meeting.
-    const avail = working.map((w) => ({ s: toMin(w.shift.start), e: shiftEndMin(w.shift), busy: busySpans(w.e, S.homeDate, w.shift) }));
+    // if any 15 minutes of that hour are on shift and not in a meeting. On a
+    // single region's tab, time split out to other regions doesn't count and
+    // people covering from other regions do.
+    const single = S.region !== 'all';
+    const avail = [
+      ...working.map((w) => ({
+        s: toMin(w.shift.start),
+        e: shiftEndMin(w.shift),
+        busy: [...busySpans(w.e, S.homeDate, w.shift), ...(single ? splitSpans(w.e, S.homeDate, w.shift) : [])],
+      })),
+      ...allVisits.flatMap(({ w, spans }) => spans.map((x) => ({ s: x.from, e: x.to, busy: busySpans(w.e, S.homeDate, w.shift) }))),
+    ];
     const cov = [];
     for (let h = a; h < b; h++) {
       let n = 0;
@@ -1193,7 +1277,7 @@
   // breaks, lunch and meetings. For today, things in progress are "now" and
   // the rest are upcoming; past items drop off.
   const EVENT_CAP = 10;
-  function dayEvents(working, dateStr, nowMin) {
+  function dayEvents(working, dateStr, nowMin, visits = []) {
     const now = [], next = [];
     for (const w of working) {
       const s = toMin(w.shift.start), e = shiftEndMin(w.shift);
@@ -1208,7 +1292,19 @@
         if (x.from <= nowMin && nowMin < x.to) add(now, { t: x.from, until: x.to, kind: x.kind, text: `${name} is ${x.kind === 'meeting' ? 'in' : 'on'} ${x.label}` });
         else if (nowMin < x.from) add(next, { t: x.from, until: x.to, kind: x.kind, text: `${name} has ${x.what}` });
       }
+      for (const x of splitSpans(w.e, dateStr, w.shift)) {
+        if (x.from <= nowMin && nowMin < x.to) add(now, { t: x.from, until: x.to, kind: 'split', text: `${name} is covering ${x.region}` });
+        else if (nowMin < x.from) add(next, { t: x.from, until: x.to, kind: 'split', text: `${name} covers ${x.region}` });
+      }
       if (nowMin < e) add(next, { t: e, kind: 'end', text: `${name}'s shift ends` });
+    }
+    // People from other regions covering the region being viewed.
+    for (const { w, spans } of visits) {
+      const name = firstName(w.e.name), home = regionLabel(regionOf(w.e));
+      for (const x of spans) {
+        if (x.from <= nowMin && nowMin < x.to) now.push({ e: w.e, t: x.from, until: x.to, kind: 'split', text: `${name} (${home}) is covering here` });
+        else if (nowMin < x.from) next.push({ e: w.e, t: x.from, until: x.to, kind: 'split', text: `${name} (${home}) covers here` });
+      }
     }
     now.sort((a, b) => a.until - b.until);
     next.sort((a, b) => a.t - b.t || a.e.name.localeCompare(b.e.name));
@@ -1243,7 +1339,8 @@
     // 2. Live feed (today) or the day's schedule (other days), capped.
     const d = new Date();
     const nowMin = isToday ? d.getHours() * 60 + d.getMinutes() : -1;
-    const { now, next } = dayEvents(working, S.homeDate, nowMin);
+    const visits = S.region === 'all' ? [] : visitorsFor(S.region, S.homeDate);
+    const { now, next } = dayEvents(working, S.homeDate, nowMin, visits);
     const shownNow = now.slice(0, EVENT_CAP);
     const shownNext = next.slice(0, EVENT_CAP - shownNow.length);
     const evRow = (ev, right) => `<div class="ev ev-${ev.kind}">
@@ -1491,6 +1588,7 @@
     }
 
     $('#folder-name').textContent = `${S.dir?.name || ''}/${DATA_FILE}`;
+    $('#split-toggle').checked = splitsEnabled();
 
     // Coverage hours editor (left alone while someone is editing it).
     if (!S.covDirty) renderCoverageEditor();
@@ -1935,6 +2033,7 @@
     S.menu = { emp: empId, at };
     $('#bar-menu-head').textContent = e.name;
     $('[data-act="adjust"]', menu).hidden = !S.admin;
+    $('[data-act="split"]', menu).hidden = !S.admin || !splitsEnabled();
     menu.hidden = false;
     const w = menu.offsetWidth, h = menu.offsetHeight;
     menu.style.left = Math.min(x, window.innerWidth - w - 8) + 'px';
@@ -1996,9 +2095,10 @@
   }
 
   // ---------- adjust hours (overrides) ----------
-  function openOverrideDialog(empId, dateStr) {
+  function openOverrideDialog(empId, dateStr, { mode = 'hours', splitId = null } = {}) {
     const e = emp(empId);
     if (!e) return;
+    S.ovrDate = dateStr;
     const base = e.schedule[parseYmd(dateStr).getDay()];
     const shift = effectiveShift(e, dateStr);
     const o = shift.override || null;
@@ -2006,7 +2106,8 @@
     S.ovrEmp = e.id;
     S.ovrExisting = o ? o.id : null;
     const f = $('#ovr-form');
-    $('#ovr-title').textContent = `${base.on ? 'Adjust hours' : 'Add shift'}: ${e.name}`;
+    S.ovrTitleBase = base.on ? 'Adjust hours' : 'Add shift';
+    $('#ovr-title').textContent = `${S.ovrTitleBase}: ${e.name}`;
     $('#ovr-usual').textContent = base.on
       ? `Usual hours on ${dayName}s: ${fmtTime(base.start)} – ${fmtTime(base.end)}`
       : `${firstName(e.name)} is normally off on ${dayName}s.`;
@@ -2023,8 +2124,85 @@
     updateOvrHint();
     $('#ovr-existing').hidden = !o;
     if (o) $('#ovr-existing-text').textContent = `This day already has an adjustment (${fmtRange(o.start, o.end)}, ${fmtTime(o.startTime)} – ${fmtTime(o.endTime)}${o.note ? ', ' + o.note : ''}).`;
+    fillSplitFields(e, dateStr, shift, splitId);
+    $('#ovr-mode').hidden = !splitsEnabled();
+    setOvrMode(splitsEnabled() && (mode === 'split' || splitId) ? 'split' : 'hours');
     $('#ovr-dialog').showModal();
-    f.startTime.focus();
+    (S.ovrMode === 'split' ? f.elements.splitRegion : f.startTime).focus();
+  }
+
+  // ---------- split shift fields (inside the Adjust hours window) ----------
+  function fillSplitFields(e, dateStr, shift, splitId) {
+    const f = $('#ovr-form').elements;
+    const sp = splitId ? S.splits.find((x) => x.id === splitId) : null;
+    S.splitEditing = sp ? sp.id : null;
+    const others = REGIONS.filter((r) => r !== regionOf(e) && !isHidden(r));
+    f.splitRegion.innerHTML = others.map((r) => `<option value="${r}">${r}</option>`).join('');
+    f.splitRegion.value = sp?.region || others[0] || '';
+    const seriesStart = sp ? sp.date : dateStr;
+    f.splitDate.value = seriesStart;
+    // Suggest the middle two hours of their shift.
+    const s = shift.on ? toMin(shift.start) : 9 * 60, en = shift.on ? shiftEndMin(shift) : 17 * 60;
+    const mid = Math.round((s + en) / 2 / 30) * 30;
+    f.splitStart.value = sp ? sp.startTime : minToHHMM(Math.max(s, mid - 60));
+    f.splitEnd.value = sp ? sp.endTime : minToHHMM(Math.min(en, mid + 60));
+    const label = (k) => ({ none: "Doesn't repeat", daily: 'Every day', weekly: `Every week on ${DAY_NAMES[parseYmd(seriesStart).getDay()]}` }[k]);
+    f.splitRepeat.innerHTML = ['none', 'daily', 'weekly'].map((k) => `<option value="${k}">${label(k)}</option>`).join('');
+    f.splitRepeat.value = sp?.repeat || 'none';
+    f.splitUntil.value = sp?.until || '';
+    f.splitUntil.min = seriesStart;
+    $('#split-intro').textContent = `${firstName(e.name)} (${regionLabel(regionOf(e))}) works part of the shift for another region. That time counts toward the other region's coverage, not ${regionLabel(regionOf(e))}'s.`;
+    $('#split-scope').hidden = !(sp && sp.repeat !== 'none');
+    $('#split-delete').hidden = !sp;
+    setSplitScope('one');
+    updateSplitUI();
+  }
+  function setOvrMode(mode) {
+    S.ovrMode = mode;
+    $$('#ovr-mode [data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
+    $('#ovr-hours').hidden = mode !== 'hours';
+    $('#ovr-split').hidden = mode !== 'split';
+    $('#ovr-save').textContent = mode === 'split' ? 'Save split' : 'Save hours';
+    $('#split-delete').hidden = mode !== 'split' || !S.splitEditing;
+    const e = emp(S.ovrEmp);
+    if (e) $('#ovr-title').textContent = `${mode === 'split' ? 'Split shift' : S.ovrTitleBase}: ${e.name}`;
+  }
+  function updateSplitUI() {
+    $('#split-until-wrap').style.visibility = $('#ovr-form').elements.splitRepeat.value === 'none' ? 'hidden' : 'visible';
+  }
+  function setSplitScope(scope) {
+    S.splitScope = scope;
+    $$('#split-scope-seg [data-scope]').forEach((b) => b.classList.toggle('on', b.dataset.scope === scope));
+    const f = $('#ovr-form').elements;
+    const sp = S.splitEditing && S.splits.find((x) => x.id === S.splitEditing);
+    const lock = !!sp && sp.repeat !== 'none' && scope === 'one';
+    f.splitRepeat.disabled = lock;
+    f.splitUntil.disabled = lock;
+    f.splitDate.disabled = !!sp; // a series keeps its first day
+  }
+  function cleanSplit() {
+    const f = $('#ovr-form').elements;
+    const e = emp(S.ovrEmp);
+    const region = f.splitRegion.value;
+    if (!REGIONS.includes(region) || region === regionOf(e)) throw new Error('Choose the region they will cover');
+    const date = S.splitEditing ? S.splits.find((x) => x.id === S.splitEditing).date : f.splitDate.value;
+    if (!DATE_RE.test(date)) throw new Error('Choose a starting date');
+    const startTime = f.splitStart.value, endTime = f.splitEnd.value;
+    if (!TIME_RE.test(startTime) || !TIME_RE.test(endTime)) throw new Error('Enter the hours they will cover');
+    if (startTime === endTime) throw new Error("Start and end times can't match");
+    const repeat = ['none', 'daily', 'weekly'].includes(f.splitRepeat.value) ? f.splitRepeat.value : 'none';
+    const until = repeat === 'none' ? '' : f.splitUntil.value;
+    if (until && until < date) throw new Error('"Until" is before the split starts');
+    // It has to overlap their shift on the day it starts (or the day being edited).
+    const day = S.splitEditing ? S.ovrDate : date;
+    const shift = effectiveShift(e, day);
+    const probe = { id: '_', employeeId: e.id, region, date: day, startTime, endTime, repeat: 'none' };
+    const saved = S.splits;
+    S.splits = [probe];
+    const inside = splitSpans(e, day, shift).length > 0;
+    S.splits = saved;
+    if (!inside) throw new Error(shift.on ? `That's outside ${firstName(e.name)}'s hours (${fmtTime(shift.start)} – ${fmtTime(shift.end)})` : `${firstName(e.name)} isn't working on ${fmtDate(day)}`);
+    return { region, date, startTime, endTime, repeat, until };
   }
 
   function updateOvrHint() {
@@ -2121,6 +2299,8 @@
       ev.stopPropagation();
       const block = ev.target.closest('.mtg[data-mtg]');
       if (block) return openMeetingDialog(bar.dataset.emp, S.homeDate, { id: block.dataset.mtg });
+      const split = ev.target.closest('.split[data-split]');
+      if (split && S.admin) return openOverrideDialog(bar.dataset.emp, S.homeDate, { splitId: split.dataset.split });
       // Turn the click position into a time, to suggest a meeting start.
       const e = emp(bar.dataset.emp);
       const shift = effectiveShift(e, S.homeDate);
@@ -2136,6 +2316,7 @@
       closeBarMenu();
       if (b.dataset.act === 'meeting') openMeetingDialog(empId, S.homeDate, { at });
       if (b.dataset.act === 'adjust') openOverrideDialog(empId, S.homeDate);
+      if (b.dataset.act === 'split') openOverrideDialog(empId, S.homeDate, { mode: 'split' });
     });
     document.addEventListener('click', (ev) => {
       if (!ev.target.closest('#bar-menu')) closeBarMenu();
@@ -2220,8 +2401,62 @@
       if (!f.end.value || f.end.value < ev.target.value) f.end.value = ev.target.value;
       f.end.min = ev.target.value;
     });
+    $('#ovr-mode').onclick = (ev) => {
+      const b = ev.target.closest('[data-mode]');
+      if (b) setOvrMode(b.dataset.mode);
+    };
+    $('#ovr-form').elements.splitRepeat.addEventListener('change', updateSplitUI);
+    $('#split-scope-seg').onclick = (ev) => {
+      const b = ev.target.closest('[data-scope]');
+      if (b) setSplitScope(b.dataset.scope);
+    };
+    $('#split-delete').onclick = async () => {
+      const id = S.splitEditing;
+      const sp = id && S.splits.find((x) => x.id === id);
+      if (!sp) return;
+      const oneDay = sp.repeat !== 'none' && S.splitScope === 'one';
+      const day = S.ovrDate;
+      const ok = await mutate((d) => {
+        const s = findIn(d.splits, id, 'split');
+        if (oneDay) s.skip = [...new Set([...(s.skip || []), day])];
+        else d.splits = d.splits.filter((x) => x.id !== id);
+      }, oneDay ? 'Split removed for this day' : 'Split shift removed');
+      if (ok) {
+        $('#ovr-dialog').close();
+        warnGaps(day, day, regionOf(emp(sp.employeeId) || {}));
+      }
+    };
     $('#ovr-form').onsubmit = async (ev) => {
       ev.preventDefault();
+      if (S.ovrMode === 'split') {
+        let clean;
+        try {
+          clean = cleanSplit();
+        } catch (e) {
+          return toast(e.message, true);
+        }
+        const empId = S.ovrEmp, id = S.splitEditing, day = S.ovrDate;
+        const sp = id && S.splits.find((x) => x.id === id);
+        const oneDay = !!sp && sp.repeat !== 'none' && S.splitScope === 'one';
+        const ok = await mutate((d) => {
+          d.splits = d.splits || [];
+          findIn(d.employees, empId, 'employee');
+          if (!id) d.splits.push({ id: uid(), employeeId: empId, ...clean, createdAt: new Date().toISOString() });
+          else if (oneDay) {
+            // Change just this day: skip it in the series, add a one-off.
+            const s = findIn(d.splits, id, 'split');
+            s.skip = [...new Set([...(s.skip || []), day])];
+            d.splits.push({ id: uid(), employeeId: empId, ...clean, date: day, repeat: 'none', until: '', createdAt: new Date().toISOString() });
+          } else Object.assign(findIn(d.splits, id, 'split'), clean);
+        }, !id ? `${firstName(emp(empId).name)} covers ${clean.region}${clean.repeat !== 'none' ? ' (repeating)' : ''}` : oneDay ? 'Split updated for this day' : 'Split shift updated');
+        if (ok) {
+          $('#ovr-dialog').close();
+          // Check both the home region (losing them) and the region they cover.
+          const end = clean.repeat !== 'none' ? addDays(day, 13) : day;
+          warnGaps(day, clean.until && clean.until < end ? clean.until : end, regionOf(emp(empId) || {}));
+        }
+        return;
+      }
       let clean;
       try {
         clean = cleanOverride(ev.target);
@@ -2349,6 +2584,7 @@
             d.pto = d.pto.filter((p) => p.employeeId !== e.id);
             d.overrides = d.overrides.filter((o) => o.employeeId !== e.id);
             d.meetings = d.meetings.filter((m) => m.employeeId !== e.id);
+            d.splits = (d.splits || []).filter((x) => x.employeeId !== e.id);
           }, `${e.name} removed`);
       }
       if (t.id === 'logout') {
@@ -2416,6 +2652,14 @@
       }, 'Coverage hours saved');
       if (!ok) S.covDirty = true;
     };
+
+    // split shifts on/off
+    $('#split-toggle').addEventListener('change', (ev) => {
+      const on = ev.target.checked;
+      mutate((d) => { d.settings.splitShifts = on; }, `Split shifts ${on ? 'on' : 'off'}`).then((ok) => {
+        if (!ok) ev.target.checked = !on;
+      });
+    });
 
     // holidays
     $('#hol-prev').onclick = () => { S.holYear = (S.holYear || new Date().getFullYear()) - 1; renderHolidays(); };
