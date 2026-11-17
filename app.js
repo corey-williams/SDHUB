@@ -79,6 +79,11 @@
   function firstName(name) {
     return name.split(/\s+/)[0];
   }
+  // "Riley Kim" → "Riley K."
+  function shortName(name) {
+    const parts = name.trim().split(/\s+/);
+    return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.` : parts[0];
+  }
   function fmtTime(t) {
     const [h, m] = t.split(':').map(Number);
     const ap = h >= 12 ? 'PM' : 'AM';
@@ -1532,7 +1537,7 @@
           const cls = ['pto-bar', pending && 'pending', sg.contL && 'cont-l', sg.contR && 'cont-r'].filter(Boolean).join(' ');
           const hours = isPartial(sg.p) ? ptoHours(sg.p) : '';
           const tip = `${sg.e.name}: ${fmtRange(sg.p.start, sg.p.end)}${hours ? `, ${hours}` : ''}${pending ? ' (pending approval)' : ''}${sg.p.note ? ` — ${sg.p.note}` : ''}`;
-          return `<div class="${cls}${hours ? ' partial' : ''}" data-pto="${sg.p.id}" style="--c:${sg.e.color};grid-column:${sg.col + 1} / span ${sg.span};grid-row:${sg.lane + 1}" title="${esc(tip)}">${esc(sg.e.name)}${hours ? ` <b>${esc(hours)}</b>` : ''}${pending ? ' <em>pending</em>' : ''}</div>`;
+          return `<div class="${cls}${hours ? ' partial' : ''}" data-pto="${sg.p.id}" style="--c:${sg.e.color};grid-column:${sg.col + 1} / span ${sg.span};grid-row:${sg.lane + 1}" title="${esc(tip)}">${esc(shortName(sg.e.name))}${hours ? ` <b>${esc(hours)}</b>` : ''}${pending ? ' <em>pending</em>' : ''}</div>`;
         })
         .join('');
 
