@@ -99,6 +99,8 @@
 
     <!-- PTO -->
     <section class="view" id="view-pto" hidden>
+      <div class="pto-grid">
+      <div class="pto-main">
       <div class="card calendar-card">
         <div class="cal-toolbar">
           <div>
@@ -132,7 +134,20 @@
         <div class="cal-grid weeks" id="cal-grid"></div>
       </div>
 
-      <div class="pto-grid">
+        <div class="card">
+          <div class="card-head">
+            <h2>Requests</h2>
+            <div class="seg" id="pto-filter">
+              <button type="button" data-f="all">All</button>
+              <button type="button" data-f="pending" class="on">Pending</button>
+              <button type="button" data-f="approved">Approved</button>
+              <button type="button" data-f="denied">Denied</button>
+            </div>
+          </div>
+          <div id="pto-list" class="list"></div>
+        </div>
+      </div>
+
         <form class="card form-card" id="pto-form" autocomplete="off">
           <h2>Request time off</h2>
           <p class="muted small">Requests show on the calendar as pending until an admin approves them.</p>
@@ -161,19 +176,6 @@
           <p class="muted small" id="pto-days-hint"></p>
           <button class="btn primary block" type="submit">Submit request</button>
         </form>
-
-        <div class="card">
-          <div class="card-head">
-            <h2>Requests</h2>
-            <div class="seg" id="pto-filter">
-              <button type="button" data-f="all">All</button>
-              <button type="button" data-f="pending" class="on">Pending</button>
-              <button type="button" data-f="approved">Approved</button>
-              <button type="button" data-f="denied">Denied</button>
-            </div>
-          </div>
-          <div id="pto-list" class="list"></div>
-        </div>
       </div>
     </section>
 
