@@ -1729,7 +1729,7 @@
       ? roles()
           .map((r) => {
             const n = S.employees.filter((e) => e.role === r).length;
-            return `<div class="role-row"><span>${esc(r)}</span><span class="muted small">${n ? `${n} ${n === 1 ? 'person' : 'people'}` : ''}</span><button type="button" class="btn ghost icon xs" data-del-role="${esc(r)}" aria-label="Remove ${esc(r)}" title="Remove">
+            return `<div class="role-row" draggable="true" data-role="${esc(r)}"><span class="drag-handle" title="Drag to reorder" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span><span>${esc(r)}</span><span class="muted small">${n ? `${n} ${n === 1 ? 'person' : 'people'}` : ''}</span><button type="button" class="btn ghost icon xs" data-del-role="${esc(r)}" aria-label="Remove ${esc(r)}" title="Remove">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>`;
           })
           .join('')
@@ -2954,6 +2954,47 @@
         : 'It will no longer be offered in Edit employee.';
       if (!(await confirmBox(`Remove "${r}"?`, msg, 'Remove'))) return;
       mutate((d) => { d.settings.roles = d.settings.roles.filter((x) => x !== r); }, `Removed "${r}"`);
+    });
+
+    // job titles: drag a row to reorder (the order is the dropdown order)
+    const rl = $('#role-list');
+    let dragRole = null;
+    const clearDrop = () => $$('.role-row', rl).forEach((x) => x.classList.remove('drop-before', 'drop-after', 'dragging'));
+    rl.addEventListener('dragstart', (ev) => {
+      const row = ev.target.closest('.role-row');
+      if (!row) return;
+      dragRole = row.dataset.role;
+      row.classList.add('dragging');
+      ev.dataTransfer.effectAllowed = 'move';
+      ev.dataTransfer.setData('text/plain', dragRole);
+    });
+    rl.addEventListener('dragover', (ev) => {
+      const row = ev.target.closest('.role-row');
+      if (!dragRole || !row) return;
+      ev.preventDefault();
+      const after = ev.clientY > row.getBoundingClientRect().top + row.offsetHeight / 2;
+      $$('.role-row', rl).forEach((x) => x.classList.remove('drop-before', 'drop-after'));
+      if (row.dataset.role !== dragRole) row.classList.add(after ? 'drop-after' : 'drop-before');
+    });
+    rl.addEventListener('dragend', () => { dragRole = null; clearDrop(); });
+    rl.addEventListener('drop', (ev) => {
+      ev.preventDefault();
+      const row = ev.target.closest('.role-row');
+      const from = dragRole;
+      const after = row?.classList.contains('drop-after');
+      dragRole = null;
+      clearDrop();
+      if (!row || !from || row.dataset.role === from) return;
+      const target = row.dataset.role;
+      const order = roles().filter((r) => r !== from);
+      order.splice(order.indexOf(target) + (after ? 1 : 0), 0, from);
+      // Show the new order right away, then save it.
+      S.data.settings.roles = order;
+      renderAdmin();
+      mutate((d) => {
+        const rest = d.settings.roles.filter((r) => !order.includes(r)); // added by someone else meanwhile
+        d.settings.roles = [...order.filter((r) => d.settings.roles.includes(r)), ...rest];
+      }, 'Order saved');
     });
 
     // change PIN
