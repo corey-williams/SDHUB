@@ -435,6 +435,25 @@
     </button>
   </div>
 
+  <!-- Everyone out on one day (opened from "+N more" on the PTO calendar) -->
+  <dialog id="day-dialog" class="mid-dialog"><div class="dialog-body">
+    <div class="dialog-head">
+      <div>
+        <h2 id="dl-title"></h2>
+        <p class="muted small" id="dl-sub"></p>
+      </div>
+      <button type="button" class="btn ghost icon" data-close aria-label="Close">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div id="dl-list" class="dl-list"></div>
+    <div class="dialog-foot">
+      <span class="muted small">Click someone to change or delete their time off.</span>
+      <span class="spacer"></span>
+      <button type="button" class="btn ghost" id="dl-request">Request this day off</button>
+    </div>
+  </div></dialog>
+
   <!-- Edit a PTO request (opened by clicking its bar on the PTO calendar) -->
   <dialog id="pe-dialog" class="mid-dialog">
     <form id="pe-form" autocomplete="off">

@@ -1552,7 +1552,7 @@
             .join(' ');
           return `<button class="${cls}" data-date="${ds}" aria-label="${fmtDate(ds, { weekday: 'long', month: 'long', day: 'numeric' })}${hol ? `, ${esc(hol.name)}` : ''}${count[i] ? `, ${count[i]} on PTO` : ''}">
             <div class="day-top"><span class="day-num">${d.getDate()}</span>${count[i] ? `<span class="day-count">${count[i]} off</span>` : ''}</div>
-            ${hidden[i] ? `<span class="more">+${hidden[i]} more</span>` : ''}
+            ${hidden[i] ? `<span class="more" data-more="${ds}" title="See everyone out this day">+${hidden[i]} more</span>` : ''}
           </button>`;
         })
         .join('');
@@ -1575,7 +1575,7 @@
         })
         .join('');
 
-      html += `<div class="cal-week" style="--lanes:${lanes}"><div class="week-days">${cells}</div><div class="week-bars">${bars}</div></div>`;
+      html += `<div class="cal-week${hidden.some(Boolean) ? ' has-more' : ''}" style="--lanes:${lanes}"><div class="week-days">${cells}</div><div class="week-bars">${bars}</div></div>`;
     }
     $('#cal-grid').innerHTML = html;
   }
@@ -2631,6 +2631,9 @@
       // Clicking a PTO bar opens that request to change or delete it.
       const bar = ev.target.closest('[data-pto]');
       if (bar) return openPtoEdit(bar.dataset.pto);
+      // "+N more" lists everyone out that day.
+      const more = ev.target.closest('[data-more]');
+      if (more) return openDayList(more.dataset.more);
       // Other bars (holidays) sit on top of the days; clicking picks the day underneath.
       const day = ev.target.closest('.day') || document.elementsFromPoint(ev.clientX, ev.clientY).find((el) => el.classList.contains('day'));
       if (!day) return;
@@ -2700,6 +2703,41 @@
         updatePtoHint();
       }
     };
+    // Everyone out on one day (from "+N more" on the PTO calendar).
+    function openDayList(ds) {
+      S.dayListDate = ds;
+      const reqs = S.pto
+        .filter((p) => p.status !== 'denied' && p.start <= ds && p.end >= ds && emp(p.employeeId) && ptoVisible(emp(p.employeeId)))
+        .sort((a, b) => (a.status === b.status ? emp(a.employeeId).name.localeCompare(emp(b.employeeId).name) : a.status === 'approved' ? -1 : 1));
+      const hols = holidaysOn(ds);
+      $('#dl-title').textContent = fmtDate(ds, { weekday: 'long', month: 'long', day: 'numeric' });
+      $('#dl-sub').textContent = `${reqs.length} ${reqs.length === 1 ? 'person' : 'people'} out${reqs.some((p) => p.status === 'pending') ? ` · ${reqs.filter((p) => p.status === 'pending').length} pending` : ''}`;
+      $('#dl-list').innerHTML =
+        hols.map((h) => `<div class="dl-hol">${esc(h.name)} <span class="muted small">${esc(holidayLabel(h))}</span></div>`).join('') +
+        reqs
+          .map((p) => {
+            const e = emp(p.employeeId);
+            const what = isPartial(p) ? ptoHours(p) : 'Full day';
+            const range = p.start !== p.end ? ` · ${fmtRange(p.start, p.end)}` : '';
+            return `<button type="button" class="dl-row" data-dl-pto="${p.id}">${avatar(e)}<span class="dl-main"><b>${esc(e.name)}</b><span class="muted small">${esc(what)}${esc(range)}</span></span>${regionTag(e)}<span class="tag ${esc(p.status)}">${p.status === 'approved' ? 'Approved' : 'Pending'}</span></button>`;
+          })
+          .join('');
+      $('#day-dialog').showModal();
+    }
+    $$('#day-dialog [data-close]').forEach((b) => (b.onclick = () => $('#day-dialog').close()));
+    $('#dl-list').onclick = (ev) => {
+      const row = ev.target.closest('[data-dl-pto]');
+      if (!row) return;
+      $('#day-dialog').close();
+      openPtoEdit(row.dataset.dlPto);
+    };
+    $('#dl-request').onclick = () => {
+      $('#day-dialog').close();
+      S.selected = S.dayListDate;
+      renderCalendar();
+      prefillPto(S.selected);
+    };
+
     // Edit time off dialog
     const pe = $('#pe-form');
     const setPeMode = (mode) => {

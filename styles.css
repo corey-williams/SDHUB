@@ -212,6 +212,21 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .chip.pto { background: repeating-linear-gradient(135deg, #fff1d6 0 5px, #ffe8b8 5px 10px); color: #92400e; }
 .chip.pending { background: var(--surface); border: 1px dashed var(--warn); color: #92400e; }
 .more { font-size: 11px; color: var(--muted); font-weight: 600; padding-left: 4px; }
+.more[data-more] {
+  align-self: flex-start; position: relative; z-index: 2; cursor: pointer; color: var(--accent);
+  padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 10%, white);
+}
+.more[data-more]:hover { background: color-mix(in srgb, var(--accent) 18%, white); }
+/* Everyone out on one day */
+.dl-list { display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow: auto; margin: 4px 0 8px; }
+.dl-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; text-align: left;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; font: inherit; color: inherit;
+}
+.dl-row:hover { background: var(--surface-2); }
+.dl-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.dl-main b { font-weight: 600; }
+.dl-hol { padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 12%, white); font-weight: 600; }
 
 .day-panel { position: sticky; top: 84px; }
 .day-panel h2 { font-size: 18px; }
@@ -579,6 +594,8 @@ body.is-supervisor .admin-only { display: none !important; }
 .week-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
 .week-days .day { min-height: max(96px, calc(40px + var(--lanes) * 25px + 20px)); }
 .week-days .day .more { margin-top: auto; }
+/* Weeks with a "+N more" button get extra room below the bars for it. */
+.cal-week.has-more .week-days .day { min-height: calc(40px + var(--lanes) * 25px + 34px); }
 .week-bars {
   position: absolute; left: 0; right: 0; top: 38px;
   display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: 22px; column-gap: 6px; row-gap: 3px;
@@ -672,7 +689,9 @@ dialog {
   box-shadow: 0 30px 80px -20px rgba(20, 24, 60, .35); color: var(--text);
 }
 dialog::backdrop { background: rgba(20, 24, 50, .35); backdrop-filter: blur(3px); }
-dialog form { padding: 22px; display: flex; flex-direction: column; gap: 16px; }
+dialog form, dialog .dialog-body { padding: 22px; display: flex; flex-direction: column; gap: 16px; }
+#dl-title { margin: 0; }
+#dl-sub { margin: 2px 0 0; }
 .small-dialog { width: min(400px, calc(100vw - 32px)); }
 .dialog-head { display: flex; justify-content: space-between; align-items: center; }
 .dialog-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
