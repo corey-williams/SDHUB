@@ -53,6 +53,9 @@
           <h1 id="home-date"></h1>
         </div>
         <div class="cal-nav">
+          <button class="btn ghost icon pager-btn" id="pager-btn" aria-label="Send a page" title="Send a page" hidden>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><rect x="5.5" y="9" width="9" height="4" rx="1"/><path d="M17.5 10h1M17.5 13h1M6 15.5h8"/></svg>
+          </button>
           <button class="btn ghost icon" id="day-prev" aria-label="Previous day">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 6l-6 6 6 6"/></svg>
           </button>
@@ -298,6 +301,17 @@
             </div>
           </div>
           <div class="card pin-card admin-only">
+            <div class="card-head"><h2>On-call paging</h2></div>
+            <form id="paging-form" autocomplete="off">
+              <div class="pin-row">
+                <input type="url" name="pagingUrl" class="paging-input" placeholder="https://…" />
+                <button class="btn ghost sm" type="submit">Save</button>
+                <a class="btn ghost sm" id="paging-open" href="#" target="_blank" rel="noopener noreferrer" hidden>Open</a>
+              </div>
+            </form>
+            <p class="muted small note">Saved only in <code>data.json</code> in your OneDrive folder, never in the page files on GitHub. Leave it empty and click Save to clear it.</p>
+          </div>
+          <div class="card pin-card admin-only">
             <div class="card-head"><h2>Admin PIN</h2></div>
             <form id="pin-form" autocomplete="off">
               <div class="pin-row">
@@ -434,6 +448,27 @@
       Split shift
     </button>
   </div>
+
+  <!-- Send a page (Home, pager button) -->
+  <dialog id="pager-dialog" class="small-dialog">
+    <form id="pager-form" autocomplete="off">
+      <div class="dialog-head">
+        <h2>Send a page</h2>
+        <button type="button" class="btn ghost icon" data-close aria-label="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <label>Pager number
+        <input name="pager" inputmode="numeric" pattern="[0-9]{1,10}" maxlength="10" placeholder="e.g. 1234" required class="pager-input" />
+      </label>
+      <p class="muted small">Opens the paging site in a new tab for this pager.</p>
+      <div class="dialog-foot">
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" data-close>Cancel</button>
+        <button type="submit" class="btn primary">Open paging</button>
+      </div>
+    </form>
+  </dialog>
 
   <!-- Everyone out on one day (opened from "+N more" on the PTO calendar) -->
   <dialog id="day-dialog" class="mid-dialog"><div class="dialog-body">

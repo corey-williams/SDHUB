@@ -703,6 +703,7 @@
           ? [...new Set(d.settings.roles.filter((r) => typeof r === 'string' && r.trim()).map((r) => r.trim().slice(0, 60)))]
           : [...ROLES],
         keySalt: d.settings?.keySalt || null,
+        pagingUrl: typeof d.settings?.pagingUrl === 'string' ? d.settings.pagingUrl : '',
       },
       employees: Array.isArray(d.employees) ? d.employees : [],
       pto: Array.isArray(d.pto) ? d.pto : [],
@@ -1050,8 +1051,18 @@
   }
 
   // ---------- render ----------
+  // The paging link with MSGID set to a pager number.
+  function pagingLink(pager) {
+    const url = S.data?.settings.pagingUrl || '';
+    if (!url) return '';
+    if (/([?&]MSGID=)[^&#]*/i.test(url)) return url.replace(/([?&]MSGID=)[^&#]*/i, `$1${encodeURIComponent(pager)}`);
+    return `${url}${url.includes('?') ? '&' : '?'}MSGID=${encodeURIComponent(pager)}`;
+  }
+
   function renderAll() {
     if (!S.data) return;
+    // The pager button on Home shows once the admin has saved a paging link.
+    $('#pager-btn').hidden = !S.data.settings.pagingUrl;
     // A supervisor signed in on this tab loses access if the admin removes it.
     if (S.role === 'supervisor' && !S.employees.some((e) => e.id === S.supId && e.supervisor)) {
       setRole(null);
@@ -1764,6 +1775,13 @@
           <button type="button" class="btn ghost icon xs" data-del-region="${esc(r)}" aria-label="Remove ${esc(r)}" title="${esc(delTip)}">${X_ICON}</button>
         </div>`;
       }).join('');
+
+    // On-call paging link (kept in data.json only). Don't overwrite while someone is typing.
+    const pg = $('#paging-form').pagingUrl;
+    const url = S.data.settings.pagingUrl || '';
+    if (document.activeElement !== pg && !S.pagingDirty) pg.value = url;
+    $('#paging-open').hidden = !url;
+    $('#paging-open').href = url || '#';
 
     // Job titles offered in Edit employee.
     $('#role-list').innerHTML = roles().length
@@ -3097,6 +3115,36 @@
         d.settings.regions = [...byName(d.settings.regions), ...rest];
       }, 'Order saved');
     });
+
+    // Home: send a page
+    $('#pager-btn').onclick = () => {
+      const f = $('#pager-form');
+      f.reset();
+      $('#pager-dialog').showModal();
+      f.pager.focus();
+    };
+    $$('#pager-dialog [data-close]').forEach((b) => (b.onclick = () => $('#pager-dialog').close()));
+    $('#pager-form').pager.addEventListener('input', (ev) => (ev.target.value = ev.target.value.replace(/\D/g, '')));
+    $('#pager-form').onsubmit = (ev) => {
+      ev.preventDefault();
+      const pager = ev.target.pager.value.trim();
+      if (!/^\d{1,10}$/.test(pager)) return toast('Enter the pager number (digits only)', true);
+      const link = pagingLink(pager);
+      if (!link) return toast('No paging link is set up yet', true);
+      window.open(link, '_blank', 'noopener');
+      $('#pager-dialog').close();
+    };
+
+    // on-call paging link
+    $('#paging-form').pagingUrl.addEventListener('input', () => (S.pagingDirty = true));
+    $('#paging-form').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const url = ev.target.pagingUrl.value.trim();
+      if (url && !/^https?:\/\/[^\s]+$/i.test(url)) return toast('Enter a full link starting with https://', true);
+      if (url.length > 500) return toast('That link is too long', true);
+      const ok = await mutate((d) => { d.settings.pagingUrl = url; }, url ? 'Paging link saved' : 'Paging link cleared');
+      if (ok) S.pagingDirty = false;
+    };
 
     // regions: add / remove
     $('#region-form').onsubmit = async (ev) => {

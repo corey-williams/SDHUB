@@ -643,6 +643,9 @@ body.is-supervisor .admin-only { display: none !important; }
 .pin-card { grid-column: 1 / -1; }
 .pin-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .pin-row input { width: 220px; max-width: 220px; flex: none; }
+.cal-nav .pager-btn { margin-right: 6px; }
+.pager-input { font-size: 18px; letter-spacing: .08em; }
+.pin-row input.paging-input { width: auto; max-width: none; flex: 1; min-width: 240px; }
 .rt-row[draggable] { cursor: grab; }
 .rt-row .drag-handle { display: inline-flex; color: var(--muted); opacity: .6; margin-left: -2px; }
 .rt-row:hover .drag-handle { opacity: 1; }
