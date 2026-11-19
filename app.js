@@ -406,9 +406,20 @@
       })
       .filter((x) => x.to > x.from);
   }
+  // Running late: from the start of their shift until they arrive.
+  function lateSpans(e, dateStr, shift) {
+    if (!shift?.on) return [];
+    const abs = absenceFor(e, dateStr);
+    if (!isLate(abs)) return [];
+    const s = toMin(shift.start), end = shiftEndMin(shift);
+    let a = toMin(abs.arriveAt);
+    if (a < s && a + 1440 <= end) a += 1440;
+    const to = Math.min(a, end);
+    return to > s ? [{ a: abs, from: s, to }] : [];
+  }
   // Everything that makes someone unavailable during their shift.
   function busySpans(e, dateStr, shift) {
-    return [...meetingSpans(e, dateStr, shift), ...breakSpans(e, shift), ...ptoSpans(e, dateStr, shift)];
+    return [...meetingSpans(e, dateStr, shift), ...breakSpans(e, shift), ...ptoSpans(e, dateStr, shift), ...lateSpans(e, dateStr, shift)];
   }
   const GRIP_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>`;
   const X_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
@@ -538,7 +549,9 @@
   }
 
   // Marked absent (called in, no-show, etc.) from Adjust hours → Absent.
-  const ABSENCE_REASONS = ['Called In - Sick', 'Called In - Other', 'No Call No Show', 'Assisting other team'];
+  // "Late" keeps them on the schedule but starts their shift at arriveAt.
+  const ABSENCE_REASONS = ['Called In - Sick', 'Called In - Other', 'No Call No Show', 'Assisting other team', 'Late'];
+  const isLate = (a) => a?.reason === 'Late' && TIME_RE.test(a.arriveAt || '');
   function absenceFor(e, dateStr) {
     let best = null;
     for (const a of S.data?.absences || []) {
@@ -555,16 +568,15 @@
     for (const e of S.employees) {
       // Absent takes them off the schedule (and out of coverage) for the day.
       const abs = absenceFor(e, dateStr);
-      if (abs) {
-        absent.push({ e, absence: abs });
-        continue;
-      }
+      if (abs) absent.push({ e, absence: abs });
+      if (abs && !isLate(abs)) continue;
       const reqs = S.pto.filter((p) => p.employeeId === e.id && p.start <= dateStr && p.end >= dateStr && p.status !== 'denied');
       // A full day of approved PTO takes them off; partial-day PTO leaves them
       // working with those hours blocked out (see ptoSpans).
       const approved = reqs.find((p) => p.status === 'approved' && !isPartial(p));
       const partial = reqs.filter((p) => p.status === 'approved' && isPartial(p));
       const pending = reqs.find((p) => p.status === 'pending');
+      // Running late keeps their normal hours; lateSpans() blocks out the time before they arrive.
       const shift = effectiveShift(e, dateStr, dow);
       if (approved) pto.push({ e, req: approved, scheduled: shift.on });
       else {
@@ -1247,6 +1259,17 @@
             `<div class="ptob" style="left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="PTO: ${esc(ptoHours(p))}${p.note ? ` — ${esc(p.note)}` : ''}"><span>PTO</span></div>`
         )
         .join('');
+      // Running late: striped like a meeting, labeled Late. The bar's hours label moves past it.
+      const lates = lateSpans(w.e, S.homeDate, w.shift);
+      const labelPad = lates.length ? `padding-left:calc(${((lates[0].to - s) / (e - s)) * 100}% + 4px)` : '';
+      // Shown hours start when they actually arrive.
+      const shownLabel = lates.length ? `${fmtTime(lates[0].a.arriveAt)} – ${fmtTime(w.shift.end)}` : label;
+      const lateBlocks = lates
+        .map(
+          ({ a, from, to }) =>
+            `<div class="mtg late-block" style="left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="Late: in at ${fmtTime(a.arriveAt)}${a.note ? ` — ${esc(a.note)}` : ''}"><span class="mtg-name">Late</span></div>`
+        )
+        .join('');
       // Split shift: the part worked for another region, in that region's color.
       const splits = splitSpans(w.e, S.homeDate, w.shift);
       const splitBlocks = splits
@@ -1267,7 +1290,7 @@
         `\nClick to ${S.admin ? 'add a meeting block or adjust hours' : 'add a meeting block'}`;
       return `<div class="tl-row">
         <div class="tl-who">${avatar(w.e, 'sm')}<div class="tl-names"><div class="tl-name">${esc(w.e.name)}</div><div class="tl-sub">${esc(o?.note || w.e.role || '')}</div></div></div>
-        <div class="tl-track"><div class="${cls}" data-emp="${w.e.id}" style="--c:${w.e.color};left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(tip)}"><span>${label}${o ? ` <em>${w.shift.extra ? 'extra shift' : 'adjusted'}</em>` : ''}</span>${splitBlocks}${brkBlocks}${blocks}${ptoBlocks}</div></div>
+        <div class="tl-track"><div class="${cls}" data-emp="${w.e.id}" style="--c:${w.e.color};left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(tip)}"><span style="${labelPad}">${shownLabel}${o ? ` <em>${w.shift.extra ? 'extra shift' : 'adjusted'}</em>` : ''}</span>${splitBlocks}${brkBlocks}${blocks}${ptoBlocks}${lateBlocks}</div></div>
       </div>`;
     };
     // Someone from another region shown in the region they're covering: a bar
@@ -1393,7 +1416,12 @@
       const s = toMin(w.shift.start), e = shiftEndMin(w.shift);
       const name = firstName(w.e.name);
       const add = (list, ev) => list.push({ e: w.e, ...ev });
-      if (nowMin < s) add(next, { t: s, kind: 'start', text: `${name}'s shift starts`, sub: `${fmtTime(w.shift.start)} – ${fmtTime(w.shift.end)}` });
+      // Running late: "arrives (late)" at their arrival time takes the place of the shift start.
+      const late = lateSpans(w.e, dateStr, w.shift)[0];
+      if (late) {
+        if (late.from <= nowMin && nowMin < late.to) add(now, { t: late.from, until: late.to, kind: 'meeting', text: `${name} coming in late` });
+        else if (nowMin < late.to) add(next, { t: late.to, kind: 'start', text: `${name} coming in late` });
+      } else if (nowMin < s) add(next, { t: s, kind: 'start', text: `${name}'s shift starts`, sub: `${fmtTime(w.shift.start)} – ${fmtTime(w.shift.end)}` });
       const spans = [
         ...breakSpans(w.e, w.shift).map((x) => ({ ...x, kind: x.b.kind, what: x.b.kind === 'lunch' ? 'lunch' : 'a break', label: x.b.kind === 'lunch' ? 'lunch' : 'break' })),
         ...meetingSpans(w.e, dateStr, w.shift).map((x) => ({ ...x, kind: 'meeting', what: `a meeting: ${x.m.title}`, label: `a meeting: ${x.m.title}` })),
@@ -1454,7 +1482,7 @@
           personRow(
             e,
             `<span class="ooo-right"><span class="tag absent">${esc(a.reason)}</span>${S.admin ?`<button class="btn ghost icon xs" data-unabsent="${a.id}" data-unabsent-emp="${e.id}" title="Edit or remove" aria-label="Edit absence for ${esc(e.name)}"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>` : ''}</span>`,
-            sub(e, `${a.start !== a.end ? esc(fmtRange(a.start, a.end)) : 'All day'}${a.note ? ` · ${esc(a.note)}` : ''}`)
+            sub(e, `${isLate(a) ? `In at ${fmtTime(a.arriveAt)}` : a.start !== a.end ? esc(fmtRange(a.start, a.end)) : 'All day'}${a.note ? ` · ${esc(a.note)}` : ''}`)
           )
         );
       html += `<div class="ooo-sec">${section(`${oooIcon}Call-ins`, rows.length, rows.join(''))}</div>`;
@@ -2306,7 +2334,7 @@
     fillSplitFields(e, dateStr, shift, splitId);
     fillAbsentFields(e, dateStr);
     $('#ovr-mode-split').hidden = !splitsEnabled();
-    setOvrMode(mode === 'absent' || S.absEditing ? 'absent' : splitsEnabled() && (mode === 'split' || splitId) ? 'split' : 'hours');
+    setOvrMode(mode === 'absent' ? 'absent' : splitsEnabled() && (mode === 'split' || splitId) ? 'split' : 'hours');
     $('#ovr-dialog').showModal();
     (S.ovrMode === 'split' ? f.elements.splitRegion : S.ovrMode === 'absent' ? f.elements.absReason : f.startTime).focus();
   }
@@ -2323,15 +2351,37 @@
     f.absEnd.value = a ? a.end : dateStr;
     f.absEnd.min = f.absStart.value;
     f.absNote.value = a?.note || '';
+    // Default arrival: an hour after their usual start.
+    const shift = effectiveShift(e, dateStr);
+    const base = shift.on ? toMin(shift.start) : 8 * 60;
+    f.absArrive.value = a?.arriveAt || minToHHMM(Math.min(base + 60, 23 * 60 + 45));
+    updateAbsentUI();
+  }
+  // "Late" asks for one day and an arrival time instead of a date range.
+  function updateAbsentUI() {
+    const f = $('#ovr-form').elements;
+    const late = f.absReason.value === 'Late';
+    $('#abs-end-wrap').hidden = late;
+    $('#abs-arrive-wrap').hidden = !late;
+    $('#abs-start-label').textContent = late ? 'Date' : 'From';
+    $('#abs-hint').innerHTML = late
+      ? "Their bar keeps its normal hours with a striped <b>Late</b> block until they arrive (coverage counts them from then), and they're listed under <b>Call-ins</b> in Events."
+      : "They're taken off the schedule and coverage for these days and listed under <b>Call-ins</b> in Events.";
   }
   function cleanAbsence() {
     const f = $('#ovr-form').elements;
     const reason = f.absReason.value;
     if (!reason) throw new Error('Choose a reason');
-    const start = f.absStart.value, end = f.absEnd.value;
+    const late = reason === 'Late';
+    const start = f.absStart.value, end = late ? start : f.absEnd.value;
     if (!DATE_RE.test(start) || !DATE_RE.test(end)) throw new Error('Please enter valid dates');
     if (end < start) throw new Error('End date is before start date');
-    return { start, end, reason: reason.slice(0, 60), note: str(f.absNote.value, 'Note', 120, false) };
+    const out = { start, end, reason: reason.slice(0, 60), note: str(f.absNote.value, 'Note', 120, false) };
+    if (late) {
+      if (!TIME_RE.test(f.absArrive.value)) throw new Error('Enter the time they will be in');
+      out.arriveAt = f.absArrive.value;
+    }
+    return out;
   }
 
   // ---------- split shift fields (inside the Adjust hours window) ----------
@@ -2366,7 +2416,7 @@
     $('#ovr-hours').hidden = mode !== 'hours';
     $('#ovr-split').hidden = mode !== 'split';
     $('#ovr-absent').hidden = mode !== 'absent';
-    $('#ovr-save').textContent = mode === 'split' ? 'Save split' : mode === 'absent' ? (S.absEditing ? 'Save absence' : 'Mark absent') : 'Save hours';
+    $('#ovr-save').textContent = mode === 'split' ? 'Save split' : mode === 'absent' ? 'Save' : 'Save hours';
     $('#split-delete').hidden = mode !== 'split' || !S.splitEditing;
     $('#abs-delete').hidden = mode !== 'absent' || !S.absEditing;
     const e = emp(S.ovrEmp);
@@ -2506,6 +2556,7 @@
       if (block) return openMeetingDialog(bar.dataset.emp, S.homeDate, { id: block.dataset.mtg });
       const split = ev.target.closest('.split[data-split]');
       if (split && S.admin) return openOverrideDialog(bar.dataset.emp, S.homeDate, { splitId: split.dataset.split });
+      if (ev.target.closest('.late-block') && S.admin) return openOverrideDialog(bar.dataset.emp, S.homeDate, { mode: 'absent' });
       // Turn the click position into a time, to suggest a meeting start.
       const e = emp(bar.dataset.emp);
       const shift = effectiveShift(e, S.homeDate);
@@ -2631,6 +2682,7 @@
         warnGaps(day, day, regionOf(emp(sp.employeeId) || {}));
       }
     };
+    $('#ovr-form').absReason.addEventListener('change', updateAbsentUI);
     $('#ovr-form').absStart.addEventListener('change', (ev) => {
       const f = $('#ovr-form');
       if (!f.absEnd.value || f.absEnd.value < ev.target.value) f.absEnd.value = ev.target.value;
@@ -2657,9 +2709,13 @@
         const empId = S.ovrEmp, id = S.absEditing;
         const ok = await mutate((d) => {
           findIn(d.employees, empId, 'employee');
-          if (id) Object.assign(findIn(d.absences, id, 'absence'), clean, { updatedAt: new Date().toISOString() });
+          if (id) {
+            const a = findIn(d.absences, id, 'absence');
+            delete a.arriveAt;
+            Object.assign(a, clean, { updatedAt: new Date().toISOString() });
+          }
           else d.absences.push({ id: uid(), employeeId: empId, ...clean, createdAt: new Date().toISOString() });
-        }, id ? 'Absence updated' : `${firstName(emp(empId).name)} marked absent: ${clean.reason}`);
+        }, id ? 'Updated' : clean.arriveAt ? `${firstName(emp(empId).name)} is late, in at ${fmtTime(clean.arriveAt)}` : `${firstName(emp(empId).name)} marked absent: ${clean.reason}`);
         if (ok) {
           $('#ovr-dialog').close();
           warnGaps(clean.start, clean.end, regionOf(emp(empId) || {}));

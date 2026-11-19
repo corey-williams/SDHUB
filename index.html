@@ -637,13 +637,14 @@
       <div class="ovr-section" id="ovr-absent" hidden>
         <label><span class="lbl">Reason</span><select name="absReason"></select></label>
         <div class="row2">
-          <label>From <input type="date" name="absStart" /></label>
-          <label>To <input type="date" name="absEnd" /></label>
+          <label><span id="abs-start-label">From</span> <input type="date" name="absStart" /></label>
+          <label id="abs-end-wrap">To <input type="date" name="absEnd" /></label>
+          <label id="abs-arrive-wrap" hidden>Arriving at <input type="time" name="absArrive" step="900" /></label>
         </div>
         <label>Note <span class="muted small">(optional)</span>
           <input name="absNote" maxlength="120" placeholder="e.g. Back tomorrow" />
         </label>
-        <p class="muted small">They're taken off the schedule and coverage for these days and listed under <b>Call-ins</b> in Events.</p>
+        <p class="muted small" id="abs-hint">They're taken off the schedule and coverage for these days and listed under <b>Call-ins</b> in Events.</p>
       </div>
 
       <!-- Change hours -->
