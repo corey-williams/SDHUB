@@ -1487,8 +1487,8 @@
           personRow(
             e,
             `<span class="ooo-right"><span class="tag absent">${esc(a.reason)}</span>${S.admin ?`<button class="btn ghost icon xs" data-unabsent="${a.id}" data-unabsent-emp="${e.id}" title="Edit or remove" aria-label="Edit absence for ${esc(e.name)}"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>` : ''}</span>`,
-            // Absent means all day, so a single day shows no time; late shows when they're in.
-            sub(e, [isLate(a) ? `In at ${fmtTime(a.arriveAt)}` : a.start !== a.end ? esc(fmtRange(a.start, a.end)) : '', a.note ? esc(a.note) : ''].filter(Boolean).join(' · '))
+            // Just who and their region; the tag says why.
+            sub(e, '')
           )
         );
       html += `<div class="ooo-sec">${section(`${oooIcon}Call-ins`, rows.length, rows.join(''))}</div>`;
