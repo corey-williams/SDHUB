@@ -246,6 +246,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .tag.pending { background: var(--warn-soft); color: #b45309; }
 .tag.approved { background: var(--ok-soft); color: #047857; }
 .tag.denied { background: var(--bad-soft); color: #b91c1c; }
+.tag.absent { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); white-space: nowrap; }
+.ooo-right { display: flex; align-items: center; gap: 4px; flex: none; }
 .empty { color: var(--muted); font-size: 13px; padding: 10px 0; }
 .empty-big { text-align: center; padding: 36px 12px; color: var(--muted); }
 

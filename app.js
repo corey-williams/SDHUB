@@ -537,11 +537,28 @@
     return d ? { start: d.start, end: d.end } : { start: '08:00', end: '17:00' };
   }
 
-  // Everyone's status on a date: working (with shift), on approved PTO, or not scheduled.
+  // Marked absent (called in, no-show, etc.) from Adjust hours → Absent.
+  const ABSENCE_REASONS = ['Called In - Sick', 'Called In - Other', 'No Call No Show', 'Assisting other team'];
+  function absenceFor(e, dateStr) {
+    let best = null;
+    for (const a of S.data?.absences || []) {
+      if (a.employeeId !== e.id || a.start > dateStr || a.end < dateStr) continue;
+      if (!best || (a.createdAt || '') > (best.createdAt || '')) best = a;
+    }
+    return best;
+  }
+
+  // Everyone's status on a date: absent, working (with shift), on approved PTO, or not scheduled.
   function dayStatus(dateStr) {
     const dow = parseYmd(dateStr).getDay();
-    const working = [], pto = [], off = [];
+    const working = [], pto = [], off = [], absent = [];
     for (const e of S.employees) {
+      // Absent takes them off the schedule (and out of coverage) for the day.
+      const abs = absenceFor(e, dateStr);
+      if (abs) {
+        absent.push({ e, absence: abs });
+        continue;
+      }
       const reqs = S.pto.filter((p) => p.employeeId === e.id && p.start <= dateStr && p.end >= dateStr && p.status !== 'denied');
       // A full day of approved PTO takes them off; partial-day PTO leaves them
       // working with those hours blocked out (see ptoSpans).
@@ -556,7 +573,7 @@
         for (const req of partial) pto.push({ e, req, scheduled: shift.on, partial: true });
       }
     }
-    return { working, pto, off };
+    return { working, pto, off, absent };
   }
 
   // PTO (approved or pending) that covers a date, one entry per person.
@@ -710,6 +727,7 @@
       overrides: Array.isArray(d.overrides) ? d.overrides : [],
       meetings: Array.isArray(d.meetings) ? d.meetings : [],
       splits: Array.isArray(d.splits) ? d.splits : [],
+      absences: Array.isArray(d.absences) ? d.absences.filter((a) => a && DATE_RE.test(a.start || '') && DATE_RE.test(a.end || '')) : [],
       updatedAt: d.updatedAt || null,
     };
   }
@@ -1102,6 +1120,7 @@
       working: everyone.working.filter((x) => visibleEmp(x.e)),
       pto: everyone.pto.filter((x) => visibleEmp(x.e)),
       off: everyone.off.filter((x) => visibleEmp(x.e)),
+      absent: everyone.absent.filter((x) => visibleEmp(x.e)),
     };
     const regs = ['all', ...regionTabs()];
     if (!regs.includes(S.region)) S.region = 'all';
@@ -1117,7 +1136,7 @@
     const onPto = status.pto.filter((p) => inRegion(p.e, S.region));
     const off = status.off.filter((o) => inRegion(o.e, S.region));
     const pendingPto = [...working, ...off].filter((x) => x.pending);
-
+    const absent = status.absent.filter((x) => inRegion(x.e, S.region));
 
     // Coverage check per region: "All regions" shows every checked region,
     // a single region's tab shows just that region.
@@ -1157,7 +1176,7 @@
 
     renderTimeline(working, isToday, win, gapMap);
     renderStartGroups(working);
-    renderTimeOff(onPto, pendingPto, off.filter((o) => !o.pending), working);
+    renderTimeOff(onPto, pendingPto, off.filter((o) => !o.pending), working, absent);
   }
 
   function renderTimeline(working, isToday, win = null, gapMap = {}) {
@@ -1416,7 +1435,7 @@
     return `in ${h} hr${m ? ` ${m} min` : ''}`;
   }
 
-  function renderTimeOff(onPto, pendingPto, notScheduled, working = []) {
+  function renderTimeOff(onPto, pendingPto, notScheduled, working = [], absent = []) {
     const section = (title, count, body) => `<div class="panel-sec"><h3><span>${title}</span><span>${count}</span></h3>${body}</div>`;
     const sub = (e, text) => `${S.region === 'all' ? regionTag(e) + ' ' : ''}${text}`;
     const isToday = S.homeDate === ymd(new Date());
@@ -1426,7 +1445,22 @@
       return;
     }
 
-    // 1. PTO always first.
+    // 0. Out of Office: only when someone is marked absent this day.
+    if (absent.length) {
+      const oooIcon = `<svg class="sec-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>`;
+      const rows = absent
+        .sort((a, b) => a.e.name.localeCompare(b.e.name))
+        .map(({ e, absence: a }) =>
+          personRow(
+            e,
+            `<span class="ooo-right"><span class="tag absent">${esc(a.reason)}</span>${S.admin ?`<button class="btn ghost icon xs" data-unabsent="${a.id}" data-unabsent-emp="${e.id}" title="Edit or remove" aria-label="Edit absence for ${esc(e.name)}"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>` : ''}</span>`,
+            sub(e, `${a.start !== a.end ? esc(fmtRange(a.start, a.end)) : 'All day'}${a.note ? ` · ${esc(a.note)}` : ''}`)
+          )
+        );
+      html += `<div class="ooo-sec">${section(`${oooIcon}Call-ins`, rows.length, rows.join(''))}</div>`;
+    }
+
+    // 1. PTO.
     const ptoRows = [
       ...onPto.map((p) =>
         personRow(
@@ -2270,10 +2304,34 @@
     $('#ovr-existing').hidden = !o;
     if (o) $('#ovr-existing-text').textContent = `This day already has an adjustment (${fmtRange(o.start, o.end)}, ${fmtTime(o.startTime)} – ${fmtTime(o.endTime)}${o.note ? ', ' + o.note : ''}).`;
     fillSplitFields(e, dateStr, shift, splitId);
-    $('#ovr-mode').hidden = !splitsEnabled();
-    setOvrMode(splitsEnabled() && (mode === 'split' || splitId) ? 'split' : 'hours');
+    fillAbsentFields(e, dateStr);
+    $('#ovr-mode-split').hidden = !splitsEnabled();
+    setOvrMode(mode === 'absent' || S.absEditing ? 'absent' : splitsEnabled() && (mode === 'split' || splitId) ? 'split' : 'hours');
     $('#ovr-dialog').showModal();
-    (S.ovrMode === 'split' ? f.elements.splitRegion : f.startTime).focus();
+    (S.ovrMode === 'split' ? f.elements.splitRegion : S.ovrMode === 'absent' ? f.elements.absReason : f.startTime).focus();
+  }
+
+  // ---------- absent fields (inside the Adjust hours window) ----------
+  function fillAbsentFields(e, dateStr) {
+    const f = $('#ovr-form').elements;
+    const a = absenceFor(e, dateStr);
+    S.absEditing = a ? a.id : null;
+    const reasons = a && !ABSENCE_REASONS.includes(a.reason) ? [...ABSENCE_REASONS, a.reason] : ABSENCE_REASONS;
+    f.absReason.innerHTML = reasons.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join('');
+    f.absReason.value = a ? a.reason : ABSENCE_REASONS[0];
+    f.absStart.value = a ? a.start : dateStr;
+    f.absEnd.value = a ? a.end : dateStr;
+    f.absEnd.min = f.absStart.value;
+    f.absNote.value = a?.note || '';
+  }
+  function cleanAbsence() {
+    const f = $('#ovr-form').elements;
+    const reason = f.absReason.value;
+    if (!reason) throw new Error('Choose a reason');
+    const start = f.absStart.value, end = f.absEnd.value;
+    if (!DATE_RE.test(start) || !DATE_RE.test(end)) throw new Error('Please enter valid dates');
+    if (end < start) throw new Error('End date is before start date');
+    return { start, end, reason: reason.slice(0, 60), note: str(f.absNote.value, 'Note', 120, false) };
   }
 
   // ---------- split shift fields (inside the Adjust hours window) ----------
@@ -2307,10 +2365,12 @@
     $$('#ovr-mode [data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
     $('#ovr-hours').hidden = mode !== 'hours';
     $('#ovr-split').hidden = mode !== 'split';
-    $('#ovr-save').textContent = mode === 'split' ? 'Save split' : 'Save hours';
+    $('#ovr-absent').hidden = mode !== 'absent';
+    $('#ovr-save').textContent = mode === 'split' ? 'Save split' : mode === 'absent' ? (S.absEditing ? 'Save absence' : 'Mark absent') : 'Save hours';
     $('#split-delete').hidden = mode !== 'split' || !S.splitEditing;
+    $('#abs-delete').hidden = mode !== 'absent' || !S.absEditing;
     const e = emp(S.ovrEmp);
-    if (e) $('#ovr-title').textContent = `${mode === 'split' ? 'Split shift' : S.ovrTitleBase}: ${e.name}`;
+    if (e) $('#ovr-title').textContent = `${mode === 'split' ? 'Split shift' : mode === 'absent' ? 'Absent' : S.ovrTitleBase}: ${e.name}`;
   }
   function updateSplitUI() {
     $('#split-until-wrap').style.visibility = $('#ovr-form').elements.splitRepeat.value === 'none' ? 'hidden' : 'visible';
@@ -2571,8 +2631,41 @@
         warnGaps(day, day, regionOf(emp(sp.employeeId) || {}));
       }
     };
+    $('#ovr-form').absStart.addEventListener('change', (ev) => {
+      const f = $('#ovr-form');
+      if (!f.absEnd.value || f.absEnd.value < ev.target.value) f.absEnd.value = ev.target.value;
+      f.absEnd.min = ev.target.value;
+    });
+    $('#abs-delete').onclick = async () => {
+      const id = S.absEditing;
+      if (!id) return;
+      const ok = await mutate((d) => {
+        findIn(d.absences, id, 'absence');
+        d.absences = d.absences.filter((a) => a.id !== id);
+      }, 'Absence removed');
+      if (ok) $('#ovr-dialog').close();
+    };
     $('#ovr-form').onsubmit = async (ev) => {
       ev.preventDefault();
+      if (S.ovrMode === 'absent') {
+        let clean;
+        try {
+          clean = cleanAbsence();
+        } catch (e) {
+          return toast(e.message, true);
+        }
+        const empId = S.ovrEmp, id = S.absEditing;
+        const ok = await mutate((d) => {
+          findIn(d.employees, empId, 'employee');
+          if (id) Object.assign(findIn(d.absences, id, 'absence'), clean, { updatedAt: new Date().toISOString() });
+          else d.absences.push({ id: uid(), employeeId: empId, ...clean, createdAt: new Date().toISOString() });
+        }, id ? 'Absence updated' : `${firstName(emp(empId).name)} marked absent: ${clean.reason}`);
+        if (ok) {
+          $('#ovr-dialog').close();
+          warnGaps(clean.start, clean.end, regionOf(emp(empId) || {}));
+        }
+        return;
+      }
       if (S.ovrMode === 'split') {
         let clean;
         try {
@@ -2633,6 +2726,9 @@
     $('#time-off').addEventListener('click', (ev) => {
       const a = ev.target.closest('[data-request]');
       if (a) prefillPto(a.dataset.request);
+      // Edit or remove an absence from Out of Office.
+      const u = ev.target.closest('[data-unabsent-emp]');
+      if (u) openOverrideDialog(u.dataset.unabsentEmp, S.homeDate, { mode: 'absent' });
     });
 
     // PTO calendar

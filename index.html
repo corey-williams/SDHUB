@@ -627,9 +627,23 @@
         </button>
       </div>
       <p class="muted small" id="ovr-usual"></p>
-      <div class="seg" id="ovr-mode" hidden>
+      <div class="seg" id="ovr-mode">
         <button type="button" data-mode="hours" class="on">Change hours</button>
-        <button type="button" data-mode="split">Split shift</button>
+        <button type="button" data-mode="split" id="ovr-mode-split">Split shift</button>
+        <button type="button" data-mode="absent">Absent</button>
+      </div>
+
+      <!-- Absent: off the schedule for the day(s), listed under Out of Office -->
+      <div class="ovr-section" id="ovr-absent" hidden>
+        <label><span class="lbl">Reason</span><select name="absReason"></select></label>
+        <div class="row2">
+          <label>From <input type="date" name="absStart" /></label>
+          <label>To <input type="date" name="absEnd" /></label>
+        </div>
+        <label>Note <span class="muted small">(optional)</span>
+          <input name="absNote" maxlength="120" placeholder="e.g. Back tomorrow" />
+        </label>
+        <p class="muted small">They're taken off the schedule and coverage for these days and listed under <b>Call-ins</b> in Events.</p>
       </div>
 
       <!-- Change hours -->
@@ -679,6 +693,7 @@
 
       <div class="dialog-foot">
         <button type="button" class="btn ghost danger-text" id="split-delete" hidden>Remove split</button>
+        <button type="button" class="btn ghost danger-text" id="abs-delete" hidden>Remove absence</button>
         <span class="spacer"></span>
         <button type="button" class="btn ghost" data-close>Cancel</button>
         <button type="submit" class="btn primary" id="ovr-save">Save hours</button>
