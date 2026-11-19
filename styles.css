@@ -315,8 +315,12 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .tl-bar.editable:hover { box-shadow: 0 0 0 2px var(--c); filter: brightness(.97); }
 .tl-bar.adjusted { box-shadow: inset 0 0 0 1.5px var(--c); }
 .tl-bar em { font-style: normal; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-left: 6px; padding: 1px 5px; border-radius: 4px; background: var(--c); color: #fff; }
+/* Layers inside a shift bar, bottom to top: split-shift color, breaks/lunch
+   (see-through stripes), the hours label and split label, then meetings,
+   Late/Leaving early and PTO blocks. */
+.tl-bar { isolation: isolate; }
 .mtg {
-  position: absolute; top: 0; bottom: 0; z-index: 1; cursor: pointer;
+  position: absolute; top: 0; bottom: 0; z-index: 3; cursor: pointer;
   display: flex; align-items: center; padding: 0 5px; overflow: hidden; min-width: 0;
   /* Same look as breaks: the employee's color in darker diagonal stripes. */
   background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 26%, white) 0 5px, color-mix(in srgb, var(--c) 42%, white) 5px 10px);
@@ -325,14 +329,17 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 }
 .mtg:hover { filter: brightness(.96); }
 .mtg-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
-.tl-bar > span { position: relative; z-index: 0; overflow: hidden; text-overflow: ellipsis; }
-/* Breaks and lunch inside a shift bar: grey stripes, distinct from amber meetings. */
-/* Breaks and lunch use the employee's own color (--c from the bar), in
-   slightly darker diagonal stripes than the bar so they stand out. */
+/* The hours label keeps the bar's own background, so it stays readable over breaks. */
+.tl-bar > span {
+  position: relative; z-index: 2; overflow: hidden; text-overflow: ellipsis;
+  background: inherit; border-radius: 4px; padding: 1px 4px; margin-left: -4px;
+}
+/* Breaks and lunch use the employee's own color (--c from the bar) in
+   see-through diagonal stripes, so a split shift's color shows through. */
 .brk {
   position: absolute; top: 0; bottom: 0; z-index: 1;
   display: flex; align-items: center; justify-content: center; overflow: hidden;
-  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 26%, white) 0 5px, color-mix(in srgb, var(--c) 42%, white) 5px 10px);
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 14%, transparent) 0 5px, color-mix(in srgb, var(--c) 34%, transparent) 5px 10px);
   border-left: 1.5px solid color-mix(in srgb, var(--c) 60%, white); border-right: 1.5px solid color-mix(in srgb, var(--c) 60%, white);
   color: color-mix(in srgb, var(--c) 75%, black); font-size: 10.5px; font-weight: 700; letter-spacing: .02em; white-space: nowrap;
 }
@@ -563,7 +570,7 @@ body.is-supervisor .admin-only { display: none !important; }
 /* Partial-day PTO on a Home shift bar: a white gap with the person's color
    stripes and a "PTO" label, so it reads as "out" rather than "busy". */
 .ptob {
-  position: absolute; top: 0; bottom: 0; z-index: 2;
+  position: absolute; top: 0; bottom: 0; z-index: 3;
   display: flex; align-items: center; justify-content: center; overflow: hidden;
   background: repeating-linear-gradient(135deg, #fff 0 4px, color-mix(in srgb, var(--c) 22%, white) 4px 8px);
   border: 1.5px dashed color-mix(in srgb, var(--c) 70%, white);
@@ -572,13 +579,17 @@ body.is-supervisor .admin-only { display: none !important; }
 .pto-bar.partial b { font-weight: 600; opacity: .8; margin-left: 3px; }
 
 /* Split shifts on the Home graph */
+/* No z-index of its own: the color sits under breaks, the label above them. */
 .split {
-  position: absolute; top: 0; bottom: 0; z-index: 1; cursor: pointer;
+  position: absolute; top: 0; bottom: 0; cursor: pointer;
   display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 0 4px;
   background: color-mix(in srgb, var(--r) 22%, white); border-left: 3px solid var(--r);
   color: color-mix(in srgb, var(--r) 75%, black); font-size: 10.5px; font-weight: 700; white-space: nowrap;
 }
-.split span { overflow: hidden; text-overflow: ellipsis; }
+.split span {
+  position: relative; z-index: 2; overflow: hidden; text-overflow: ellipsis;
+  background: color-mix(in srgb, var(--r) 22%, white); border-radius: 4px; padding: 1px 4px;
+}
 .tl-bar.visit { background: var(--surface); border: 1.5px dashed var(--c); border-left: 3px solid var(--c); color: color-mix(in srgb, var(--c) 72%, black); }
 .tl-visit .tl-sub { color: var(--accent); font-weight: 600; }
 .setting-gap { margin-top: 14px; }
