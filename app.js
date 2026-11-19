@@ -406,7 +406,8 @@
       })
       .filter((x) => x.to > x.from);
   }
-  // Running late: from the start of their shift until they arrive.
+  // Late: from the start of their shift until they arrive.
+  // Leaving early: from when they leave until the end of their shift.
   function lateSpans(e, dateStr, shift) {
     if (!shift?.on) return [];
     const abs = absenceFor(e, dateStr);
@@ -414,8 +415,9 @@
     const s = toMin(shift.start), end = shiftEndMin(shift);
     let a = toMin(abs.arriveAt);
     if (a < s && a + 1440 <= end) a += 1440;
-    const to = Math.min(a, end);
-    return to > s ? [{ a: abs, from: s, to }] : [];
+    const t = Math.min(Math.max(a, s), end);
+    if (abs.reason === LEAVING) return t < end ? [{ a: abs, from: t, to: end, leaving: true }] : [];
+    return t > s ? [{ a: abs, from: s, to: t }] : [];
   }
   // Everything that makes someone unavailable during their shift.
   function busySpans(e, dateStr, shift) {
@@ -549,10 +551,13 @@
   }
 
   // Marked absent (called in, no-show, etc.) from Adjust hours → Absent.
-  // "Late" keeps them on the schedule but starts their shift at arriveAt.
-  const ABSENCE_REASONS = ['Sick', 'Personal', 'Other', 'Late'];
+  // "Late" and "Leaving early" keep them on the schedule; arriveAt holds the
+  // time they come in (Late) or leave (Leaving early). See lateSpans().
+  const LEAVING = 'Leaving early';
+  const ABSENCE_REASONS = ['Sick', 'Personal', 'Other', 'Late', LEAVING];
   const OLD_REASONS = { 'Called In - Sick': 'Sick', 'Called In - Other': 'Other' }; // earlier names
-  const isLate = (a) => a?.reason === 'Late' && TIME_RE.test(a.arriveAt || '');
+  const isTimed = (reason) => reason === 'Late' || reason === LEAVING;
+  const isLate = (a) => isTimed(a?.reason) && TIME_RE.test(a.arriveAt || '');
   function absenceFor(e, dateStr) {
     let best = null;
     for (const a of S.data?.absences || []) {
@@ -1264,15 +1269,16 @@
             `<div class="ptob" style="left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="PTO: ${esc(ptoHours(p))}${p.note ? ` — ${esc(p.note)}` : ''}"><span>PTO</span></div>`
         )
         .join('');
-      // Running late: striped like a meeting, labeled Late. The bar's hours label moves past it.
+      // Late / leaving early: striped like a meeting. For Late, the bar's hours label moves past it.
       const lates = lateSpans(w.e, S.homeDate, w.shift);
-      const labelPad = lates.length ? `padding-left:calc(${((lates[0].to - s) / (e - s)) * 100}% + 4px)` : '';
-      // Shown hours start when they actually arrive.
-      const shownLabel = lates.length ? `${fmtTime(lates[0].a.arriveAt)} – ${fmtTime(w.shift.end)}` : label;
+      const lt = lates[0];
+      const labelPad = lt && !lt.leaving ? `padding-left:calc(${((lt.to - s) / (e - s)) * 100}% + 4px)` : '';
+      // Shown hours are the time they're actually there.
+      const shownLabel = !lt ? label : lt.leaving ? `${fmtTime(w.shift.start)} – ${fmtTime(lt.a.arriveAt)}` : `${fmtTime(lt.a.arriveAt)} – ${fmtTime(w.shift.end)}`;
       const lateBlocks = lates
         .map(
-          ({ a, from, to }) =>
-            `<div class="mtg late-block" style="left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="Late: in at ${fmtTime(a.arriveAt)}${a.note ? ` — ${esc(a.note)}` : ''}"><span class="mtg-name">Late</span></div>`
+          ({ a, from, to, leaving }) =>
+            `<div class="mtg late-block" style="left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="${leaving ? `Leaving early at ${fmtTime(a.arriveAt)}` : `Late: in at ${fmtTime(a.arriveAt)}`}${a.note ? ` — ${esc(a.note)}` : ''}"><span class="mtg-name">${leaving ? 'Leaving early' : 'Late'}</span></div>`
         )
         .join('');
       // Split shift: the part worked for another region, in that region's color.
@@ -1423,7 +1429,11 @@
       const add = (list, ev) => list.push({ e: w.e, ...ev });
       // Running late: "arrives (late)" at their arrival time takes the place of the shift start.
       const late = lateSpans(w.e, dateStr, w.shift)[0];
-      if (late) {
+      if (late?.leaving) {
+        // Leaving early: their shift effectively ends when they leave.
+        if (nowMin < s) add(next, { t: s, kind: 'start', text: `${name}'s shift starts`, sub: `${fmtTime(w.shift.start)} – ${fmtTime(late.a.arriveAt)}` });
+        if (nowMin < late.from) add(next, { t: late.from, kind: 'end', text: `${name} leaving early` });
+      } else if (late) {
         if (late.from <= nowMin && nowMin < late.to) add(now, { t: late.from, until: late.to, kind: 'meeting', text: `${name} coming in late` });
         else if (nowMin < late.to) add(next, { t: late.to, kind: 'start', text: `${name} coming in late` });
       } else if (nowMin < s) add(next, { t: s, kind: 'start', text: `${name}'s shift starts`, sub: `${fmtTime(w.shift.start)} – ${fmtTime(w.shift.end)}` });
@@ -1447,7 +1457,7 @@
         if (x.from <= nowMin && nowMin < x.to) add(now, { t: x.from, until: x.to, kind: 'split', text: `${name} is covering ${x.region}` });
         else if (nowMin < x.from) add(next, { t: x.from, until: x.to, kind: 'split', text: `${name} covers ${x.region}` });
       }
-      if (nowMin < e && !leftEarly) add(next, { t: e, kind: 'end', text: `${name}'s shift ends` });
+      if (nowMin < e && !leftEarly && !late?.leaving) add(next, { t: e, kind: 'end', text: `${name}'s shift ends` });
     }
     // People from other regions covering the region being viewed.
     for (const { w, spans } of visits) {
@@ -2357,34 +2367,46 @@
     f.absEnd.value = a ? a.end : dateStr;
     f.absEnd.min = f.absStart.value;
     f.absNote.value = a?.note || '';
-    // Default arrival: an hour after their usual start.
+    // Default time: an hour after their usual start (Late) or before their usual end (Leaving early).
     const shift = effectiveShift(e, dateStr);
-    const base = shift.on ? toMin(shift.start) : 8 * 60;
-    f.absArrive.value = a?.arriveAt || minToHHMM(Math.min(base + 60, 23 * 60 + 45));
+    S.absDefaults = {
+      late: minToHHMM(Math.min((shift.on ? toMin(shift.start) : 8 * 60) + 60, 23 * 60 + 45)),
+      leave: minToHHMM(Math.max((shift.on ? shiftEndMin(shift) % 1440 : 17 * 60) - 60, 0)),
+    };
+    f.absArrive.value = a?.arriveAt || (a?.reason === LEAVING ? S.absDefaults.leave : S.absDefaults.late);
+    S.absLastReason = f.absReason.value;
     updateAbsentUI();
   }
-  // "Late" asks for one day and an arrival time instead of a date range.
+  // "Late" and "Leaving early" ask for one day and a time instead of a date range.
   function updateAbsentUI() {
     const f = $('#ovr-form').elements;
-    const late = f.absReason.value === 'Late';
-    $('#abs-end-wrap').hidden = late;
-    $('#abs-arrive-wrap').hidden = !late;
-    $('#abs-start-label').textContent = late ? 'Date' : 'From';
-    $('#abs-hint').innerHTML = late
-      ? "Their bar keeps its normal hours with a striped <b>Late</b> block until they arrive (coverage counts them from then), and they're listed under <b>Call-ins</b> in Events."
-      : "They're taken off the schedule and coverage for these days and listed under <b>Call-ins</b> in Events.";
+    const reason = f.absReason.value;
+    const timed = isTimed(reason);
+    // Switching between Late and Leaving early swaps in that reason's default time.
+    if (timed && S.absLastReason !== reason && S.absDefaults) f.absArrive.value = reason === LEAVING ? S.absDefaults.leave : S.absDefaults.late;
+    S.absLastReason = reason;
+    $('#abs-end-wrap').hidden = timed;
+    $('#abs-arrive-wrap').hidden = !timed;
+    $('#abs-arrive-label').textContent = reason === LEAVING ? 'Leaving at' : 'Arriving at';
+    $('#abs-start-label').textContent = timed ? 'Date' : 'From';
+    $('#abs-hint').innerHTML =
+      reason === 'Late'
+        ? "Their bar keeps its normal hours with a striped <b>Late</b> block until they arrive (coverage counts them from then), and they're listed under <b>Call-ins</b> in Events."
+        : reason === LEAVING
+          ? "Their bar keeps its normal hours with a striped <b>Leaving early</b> block from when they leave (coverage stops counting them then), and they're listed under <b>Call-ins</b> in Events."
+          : "They're taken off the schedule and coverage for these days and listed under <b>Call-ins</b> in Events.";
   }
   function cleanAbsence() {
     const f = $('#ovr-form').elements;
     const reason = f.absReason.value;
     if (!reason) throw new Error('Choose a reason');
-    const late = reason === 'Late';
+    const late = isTimed(reason);
     const start = f.absStart.value, end = late ? start : f.absEnd.value;
     if (!DATE_RE.test(start) || !DATE_RE.test(end)) throw new Error('Please enter valid dates');
     if (end < start) throw new Error('End date is before start date');
     const out = { start, end, reason: reason.slice(0, 60), note: str(f.absNote.value, 'Note', 120, false) };
     if (late) {
-      if (!TIME_RE.test(f.absArrive.value)) throw new Error('Enter the time they will be in');
+      if (!TIME_RE.test(f.absArrive.value)) throw new Error(reason === LEAVING ? 'Enter the time they are leaving' : 'Enter the time they will be in');
       out.arriveAt = f.absArrive.value;
     }
     return out;
@@ -2721,7 +2743,7 @@
             Object.assign(a, clean, { updatedAt: new Date().toISOString() });
           }
           else d.absences.push({ id: uid(), employeeId: empId, ...clean, createdAt: new Date().toISOString() });
-        }, id ? 'Updated' : clean.arriveAt ? `${firstName(emp(empId).name)} is late, in at ${fmtTime(clean.arriveAt)}` : `${firstName(emp(empId).name)} marked absent: ${clean.reason}`);
+        }, id ? 'Updated' : clean.arriveAt ? (clean.reason === LEAVING ? `${firstName(emp(empId).name)} leaving early at ${fmtTime(clean.arriveAt)}` : `${firstName(emp(empId).name)} is late, in at ${fmtTime(clean.arriveAt)}`) : `${firstName(emp(empId).name)} marked absent: ${clean.reason}`);
         if (ok) {
           $('#ovr-dialog').close();
           warnGaps(clean.start, clean.end, regionOf(emp(empId) || {}));
