@@ -1579,6 +1579,20 @@
     return visibleEmp(e) && inRegion(e, S.ptoRegion) && (S.calFilter === 'all' || e.id === S.calFilter);
   }
 
+  // Call-ins for the PTO calendar. Where two overlap for one person, the newest wins (as on Home).
+  function visibleAbsences() {
+    const list = S.data?.absences || [];
+    return list.filter((a) => {
+      const e = emp(a.employeeId);
+      if (!e || !ptoVisible(e)) return false;
+      return !list.some((b) => b !== a && b.employeeId === a.employeeId && b.start <= a.start && b.end >= a.end && (b.createdAt || '') > (a.createdAt || ''));
+    });
+  }
+  // "Sick", "Late 9 AM", "Leaving early 2 PM".
+  function absenceLabel(a) {
+    return isTimed(a.reason) && TIME_RE.test(a.arriveAt || '') ? `${a.reason} ${fmtTime(a.arriveAt)}` : a.reason;
+  }
+
   function renderCalendar() {
     const y = S.view.getFullYear(), m = S.view.getMonth();
     $('#cal-title').textContent = S.view.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
@@ -1593,6 +1607,7 @@
     const today = ymd(new Date());
     const MAX_LANES = 4;
     const reqs = S.pto.filter((p) => p.status !== 'denied' && emp(p.employeeId) && ptoVisible(emp(p.employeeId)));
+    const absences = visibleAbsences();
     let html = '';
 
     // Draw one row per week. Each PTO request becomes a bar spanning its days in
@@ -1621,11 +1636,21 @@
         for (let k = 0; k < sg.span; k++) occ[lane][sg.col + k] = true;
         sg.lane = lane;
       };
+      // Call-ins (absent, late, leaving early) go right under holidays.
+      const absSegs = absences
+        .filter((a) => a.start <= we && a.end >= ws)
+        .map((a) => {
+          const s = a.start < ws ? ws : a.start;
+          const e = a.end > we ? we : a.end;
+          return { a, e: emp(a.employeeId), col: daysBetween(ws, s) - 1, span: daysBetween(s, e), contL: a.start < ws, contR: a.end > we };
+        })
+        .sort((x, y) => x.col - y.col || y.span - x.span || x.e.name.localeCompare(y.e.name));
       holSegs.forEach(place);
+      absSegs.forEach(place);
       segs.forEach(place);
       const lanes = Math.min(occ.length, MAX_LANES);
       const count = Array(7).fill(0), hidden = Array(7).fill(0);
-      for (const sg of segs) {
+      for (const sg of [...absSegs, ...segs]) {
         for (let c = sg.col; c < sg.col + sg.span; c++) {
           count[c]++;
           if (sg.lane >= MAX_LANES) hidden[c]++;
@@ -1653,7 +1678,16 @@
             `<div class="pto-bar hol-bar ${sg.h.kind}" style="grid-column:${sg.col + 1} / span 1;grid-row:${sg.lane + 1}" title="${esc(sg.h.name)}: ${esc(holidayLabel(sg.h))}">${esc(sg.h.name)}${sg.h.kind === 'half' ? ' <em>½ day</em>' : ''}</div>`
         )
         .join('');
-      const bars = holBars + segs
+      const absBars = absSegs
+        .filter((sg) => sg.lane < MAX_LANES)
+        .map((sg) => {
+          const what = absenceLabel(sg.a);
+          const cls = ['pto-bar', 'abs-bar', sg.contL && 'cont-l', sg.contR && 'cont-r'].filter(Boolean).join(' ');
+          const tip = `${sg.e.name}: ${what}, ${fmtRange(sg.a.start, sg.a.end)}${sg.a.note ? ` — ${sg.a.note}` : ''}${S.admin ? '\nClick to change' : ''}`;
+          return `<div class="${cls}" data-abs="${sg.a.id}" style="--c:${sg.e.color};grid-column:${sg.col + 1} / span ${sg.span};grid-row:${sg.lane + 1}" title="${esc(tip)}">${esc(shortName(sg.e.name))} <b>${esc(what)}</b></div>`;
+        })
+        .join('');
+      const bars = holBars + absBars + segs
         .filter((sg) => sg.lane < MAX_LANES)
         .map((sg) => {
           const pending = sg.p.status === 'pending';
@@ -2829,6 +2863,9 @@
       // Clicking a PTO bar opens that request to change or delete it.
       const bar = ev.target.closest('[data-pto]');
       if (bar) return openPtoEdit(bar.dataset.pto);
+      // Clicking a call-in opens it in the Absent window (admins and supervisors).
+      const ab = ev.target.closest('[data-abs]');
+      if (ab && S.admin) return openAbsence(ab.dataset.abs);
       // "+N more" lists everyone out that day.
       const more = ev.target.closest('[data-more]');
       if (more) return openDayList(more.dataset.more);
@@ -2901,17 +2938,33 @@
         updatePtoHint();
       }
     };
+    function openAbsence(id) {
+      const a = (S.data?.absences || []).find((x) => x.id === id);
+      if (a) openOverrideDialog(a.employeeId, a.start, { mode: 'absent' });
+    }
     // Everyone out on one day (from "+N more" on the PTO calendar).
     function openDayList(ds) {
       S.dayListDate = ds;
+      const abs = visibleAbsences()
+        .filter((a) => a.start <= ds && a.end >= ds)
+        .sort((x, y) => emp(x.employeeId).name.localeCompare(emp(y.employeeId).name));
       const reqs = S.pto
         .filter((p) => p.status !== 'denied' && p.start <= ds && p.end >= ds && emp(p.employeeId) && ptoVisible(emp(p.employeeId)))
         .sort((a, b) => (a.status === b.status ? emp(a.employeeId).name.localeCompare(emp(b.employeeId).name) : a.status === 'approved' ? -1 : 1));
       const hols = holidaysOn(ds);
       $('#dl-title').textContent = fmtDate(ds, { weekday: 'long', month: 'long', day: 'numeric' });
-      $('#dl-sub').textContent = `${reqs.length} ${reqs.length === 1 ? 'person' : 'people'} out${reqs.some((p) => p.status === 'pending') ? ` · ${reqs.filter((p) => p.status === 'pending').length} pending` : ''}`;
+      const total = reqs.length + abs.length;
+      $('#dl-sub').textContent = `${total} ${total === 1 ? 'person' : 'people'} out${abs.length ? ` · ${abs.length} call-in${abs.length === 1 ? '' : 's'}` : ''}${reqs.some((p) => p.status === 'pending') ? ` · ${reqs.filter((p) => p.status === 'pending').length} pending` : ''}`;
       $('#dl-list').innerHTML =
         hols.map((h) => `<div class="dl-hol">${esc(h.name)} <span class="muted small">${esc(holidayLabel(h))}</span></div>`).join('') +
+        abs
+          .map((a) => {
+            const e = emp(a.employeeId);
+            const range = a.start !== a.end ? fmtRange(a.start, a.end) : '';
+            const inner = `${avatar(e)}<span class="dl-main"><b>${esc(e.name)}</b><span class="muted small">${esc(range || 'Call-in')}</span></span>${regionTag(e)}<span class="tag absent">${esc(absenceLabel(a))}</span>`;
+            return S.admin ? `<button type="button" class="dl-row" data-dl-abs="${a.id}">${inner}</button>` : `<div class="dl-row">${inner}</div>`;
+          })
+          .join('') +
         reqs
           .map((p) => {
             const e = emp(p.employeeId);
@@ -2924,6 +2977,11 @@
     }
     $$('#day-dialog [data-close]').forEach((b) => (b.onclick = () => $('#day-dialog').close()));
     $('#dl-list').onclick = (ev) => {
+      const ab = ev.target.closest('[data-dl-abs]');
+      if (ab) {
+        $('#day-dialog').close();
+        return openAbsence(ab.dataset.dlAbs);
+      }
       const row = ev.target.closest('[data-dl-pto]');
       if (!row) return;
       $('#day-dialog').close();
