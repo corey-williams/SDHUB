@@ -142,6 +142,12 @@
     const sameYear = a.slice(0, 4) === b.slice(0, 4);
     return `${fmtDate(a, sameYear ? undefined : { month: 'short', day: 'numeric', year: 'numeric' })} – ${fmtDate(b, { month: 'short', day: 'numeric', year: 'numeric' })}`;
   }
+  // Like fmtRange, but leaves the year off when both dates are this year.
+  function fmtRangeShort(a, b) {
+    const y = String(new Date().getFullYear());
+    if (a.slice(0, 4) !== y || b.slice(0, 4) !== y) return fmtRange(a, b);
+    return a === b ? fmtDate(a, { weekday: 'short', month: 'short', day: 'numeric' }) : `${fmtDate(a)} – ${fmtDate(b)}`;
+  }
   function daysBetween(a, b) {
     return Math.round((parseYmd(b) - parseYmd(a)) / 86400000) + 1;
   }
@@ -1510,10 +1516,10 @@
         personRow(
           p.e,
           `<span class="tag approved">${p.partial ? esc(ptoHours(p.req)) : 'PTO'}</span>`,
-          sub(p.e, p.partial ? `${p.req.leaveAt ? '' : 'Out '}${esc(ptoHours(p.req))}${p.req.start !== p.req.end ? ` · ${esc(fmtRange(p.req.start, p.req.end))}` : ''}` : esc(fmtRange(p.req.start, p.req.end)))
+          sub(p.e, p.partial ? `${p.req.leaveAt ? '' : 'Out '}${esc(ptoHours(p.req))}${p.req.start !== p.req.end ? ` · ${esc(fmtRangeShort(p.req.start, p.req.end))}` : ''}` : esc(fmtRangeShort(p.req.start, p.req.end)))
         )
       ),
-      ...pendingPto.map((x) => personRow(x.e, `<span class="tag pending">Pending</span>`, sub(x.e, esc(fmtRange(x.pending.start, x.pending.end))))),
+      ...pendingPto.map((x) => personRow(x.e, `<span class="tag pending">Pending</span>`, sub(x.e, esc(fmtRangeShort(x.pending.start, x.pending.end))))),
     ];
     const calIcon = `<svg class="sec-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>`;
     const clockIcon = `<svg class="sec-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
