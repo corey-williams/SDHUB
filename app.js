@@ -1574,7 +1574,6 @@
       // Late / leaving early: striped like a meeting. For Late, the bar's hours label moves past it.
       const lates = lateSpans(w.e, S.homeDate, w.shift);
       const lt = lates[0];
-      const labelPad = lt && !lt.leaving ? `padding-left:calc(${((lt.to - s) / (e - s)) * 100}% + 4px)` : '';
       // Shown hours are the time they're actually there.
       const shownLabel = !lt ? label : lt.leaving ? `${fmtTime(w.shift.start)} – ${fmtTime(lt.a.arriveAt)}` : `${fmtTime(lt.a.arriveAt)} – ${fmtTime(w.shift.end)}`;
       const lateBlocks = lates
@@ -1602,8 +1601,8 @@
         mtgs.map(({ m }) => `\nMeeting: ${m.title}, ${fmtTime(m.startTime)} – ${fmtTime(m.endTime)}`).join('') +
         `\nClick to ${S.admin ? 'add a meeting block or adjust hours' : 'add a meeting block'}`;
       return `<div class="tl-row">
-        <div class="tl-who">${avatar(w.e, 'sm')}<div class="tl-names"><div class="tl-name">${esc(w.e.name)}</div><div class="tl-sub">${esc(o?.note || w.e.role || '')}</div></div></div>
-        <div class="tl-track"><div class="${cls}" data-emp="${w.e.id}" style="--c:${w.e.color};left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(tip)}"><span style="${labelPad}">${shownLabel}${o ? (w.shift.extra ? ` <em>extra shift</em>` : `<b class="adj-star" aria-label="Adjusted">*</b>`) : ''}</span>${splitBlocks}${brkBlocks}${blocks}${ptoBlocks}${lateBlocks}</div></div>
+        <div class="tl-who">${avatar(w.e, 'sm')}<div class="tl-names"><div class="tl-name-row"><span class="tl-name">${esc(w.e.name)}</span><span class="hrs-badge${o ? ' adj' : ''}" style="--c:${w.e.color}" title="${esc(o ? (w.shift.extra ? 'Extra shift' : 'Adjusted hours') : 'Hours today')}">${shownLabel}${o ? (w.shift.extra ? ' <em>extra</em>' : '*') : ''}</span></div><div class="tl-sub">${esc(o?.note || w.e.role || '')}</div></div></div>
+        <div class="tl-track"><div class="${cls}" data-emp="${w.e.id}" style="--c:${w.e.color};left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(tip)}">${splitBlocks}${brkBlocks}${blocks}${ptoBlocks}${lateBlocks}</div></div>
       </div>`;
     };
     // Someone from another region shown in the region they're covering: a bar

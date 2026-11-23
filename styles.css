@@ -296,10 +296,20 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .stat.warn .stat-v { color: #b45309; }
 .sec-title { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 6px; }
 
-.tl { --who: 210px; position: relative; }
+.tl { --who: 290px; position: relative; }
 .tl-row { display: grid; grid-template-columns: var(--who) minmax(0, 1fr); align-items: center; min-height: 42px; }
 .tl-who { display: flex; align-items: center; gap: 10px; padding-right: 12px; min-width: 0; }
-.tl-names { min-width: 0; }
+.tl-names { min-width: 0; flex: 1; }
+/* Name with the hours worked as a badge beside it (kept off the bar so meetings can't cover it). */
+.tl-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.tl-name-row .tl-name { min-width: 0; }
+.hrs-badge {
+  flex: none; padding: 1px 7px; border-radius: 999px; white-space: nowrap;
+  font-size: 11px; font-weight: 600; line-height: 17px;
+  background: color-mix(in srgb, var(--c) 14%, white); color: color-mix(in srgb, var(--c) 70%, black);
+}
+.hrs-badge.adj { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 60%, white); }
+.hrs-badge em { font-style: normal; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-left: 3px; }
 .tl-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tl-sub { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tl-track {
@@ -319,7 +329,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .tl-bar.pending { background: var(--surface); border: 1.5px dashed var(--warn); color: #92400e; }
 .tl-bar.editable { cursor: pointer; transition: box-shadow .12s, filter .12s; }
 .tl-bar.editable:hover { box-shadow: 0 0 0 2px var(--c); filter: brightness(.97); }
-.tl-bar.adjusted { box-shadow: inset 0 0 0 1.5px var(--c); }
+/* The adjusted outline is drawn on top of breaks, lunch and meetings so it stays unbroken. */
+.tl-bar.adjusted::after {
+  content: ''; position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  border-radius: inherit; box-shadow: inset 0 0 0 1.5px var(--c);
+}
 .tl-bar .adj-star { font-weight: 800; font-size: 14px; margin-left: 1px; color: var(--c); }
 .tl-bar em { font-style: normal; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-left: 6px; padding: 1px 5px; border-radius: 4px; background: var(--c); color: #fff; }
 /* Layers inside a shift bar, bottom to top: split-shift color, breaks/lunch
@@ -776,7 +790,8 @@ dialog form, dialog .dialog-body { padding: 22px; display: flex; flex-direction:
   .ss-times label { flex: 1; }
   .ss-days button { width: 44px; }
   .label-row { flex-wrap: wrap; gap: 8px; }
-  .tl { --who: 110px; }
+  .tl { --who: 130px; }
+  .tl-name-row { flex-wrap: wrap; gap: 2px 6px; }
   .tl-sub, .tl-who .avatar { display: none; }
 }
 
