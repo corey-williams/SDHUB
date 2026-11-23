@@ -1603,7 +1603,7 @@
         `\nClick to ${S.admin ? 'add a meeting block or adjust hours' : 'add a meeting block'}`;
       return `<div class="tl-row">
         <div class="tl-who">${avatar(w.e, 'sm')}<div class="tl-names"><div class="tl-name">${esc(w.e.name)}</div><div class="tl-sub">${esc(o?.note || w.e.role || '')}</div></div></div>
-        <div class="tl-track"><div class="${cls}" data-emp="${w.e.id}" style="--c:${w.e.color};left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(tip)}"><span style="${labelPad}">${shownLabel}${o ? ` <em>${w.shift.extra ? 'extra shift' : 'adjusted'}</em>` : ''}</span>${splitBlocks}${brkBlocks}${blocks}${ptoBlocks}${lateBlocks}</div></div>
+        <div class="tl-track"><div class="${cls}" data-emp="${w.e.id}" style="--c:${w.e.color};left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(tip)}"><span style="${labelPad}">${shownLabel}${o ? (w.shift.extra ? ` <em>extra shift</em>` : `<b class="adj-star" aria-label="Adjusted">*</b>`) : ''}</span>${splitBlocks}${brkBlocks}${blocks}${ptoBlocks}${lateBlocks}</div></div>
       </div>`;
     };
     // Someone from another region shown in the region they're covering: a bar
