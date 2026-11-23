@@ -779,20 +779,36 @@
   }
 
   // ---------- remembered folder (IndexedDB) ----------
+  // Gives up after a few seconds instead of waiting forever (e.g. browser storage stuck).
+  const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
   function idbOpen() {
-    return new Promise((res, rej) => {
-      const r = indexedDB.open('service-desk-hub', 1);
-      r.onupgradeneeded = () => r.result.createObjectStore('kv');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
+    return withTimeout(
+      new Promise((res, rej) => {
+        const r = indexedDB.open('service-desk-hub', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('kv');
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+        r.onblocked = () => rej(new Error('Browser storage is busy'));
+      }),
+      5000,
+      'Browser storage did not respond'
+    );
   }
   async function idbGet(key) {
     const db = await idbOpen();
     return new Promise((res, rej) => {
       const q = db.transaction('kv').objectStore('kv').get(key);
-      q.onsuccess = () => res(q.result);
-      q.onerror = () => rej(q.error);
+      q.onsuccess = () => { res(q.result); db.close(); };
+      q.onerror = () => { rej(q.error); db.close(); };
+    });
+  }
+  async function idbDel(key) {
+    const db = await idbOpen();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').delete(key);
+      tx.oncomplete = () => { res(); db.close(); };
+      tx.onerror = () => { rej(tx.error); db.close(); };
     });
   }
   async function idbSet(key, val) {
@@ -800,8 +816,8 @@
     return new Promise((res, rej) => {
       const tx = db.transaction('kv', 'readwrite');
       tx.objectStore('kv').put(val, key);
-      tx.oncomplete = () => res();
-      tx.onerror = () => rej(tx.error);
+      tx.oncomplete = () => { res(); db.close(); };
+      tx.onerror = () => { rej(tx.error); db.close(); };
     });
   }
 
@@ -3750,23 +3766,42 @@
     } catch {
       /* no saved sign-in */
     }
-    bind();
-    showTab();
+    // If part of the page fails to set up (e.g. an update only half-downloaded),
+    // keep going so the data still loads, and say so instead of hanging.
+    let partial = null;
+    try {
+      bind();
+      showTab();
+    } catch (e) {
+      partial = e;
+      console.error(e);
+    }
     if (!('showDirectoryPicker' in window)) return showConnect('unsupported');
+    // "Choose the folder again" from the stuck-loading screen.
+    const forget = localStorage.getItem('sdh-forget-folder');
+    localStorage.removeItem('sdh-forget-folder');
     let dir = null;
     try {
-      dir = await idbGet('dir');
+      if (forget) await idbDel('dir');
+      else dir = await idbGet('dir');
     } catch {
       /* no remembered folder */
     }
-    if (!dir) return showConnect('first');
-    try {
-      if ((await dir.queryPermission({ mode: 'readwrite' })) === 'granted') return await connect(dir);
-    } catch {
-      /* fall through to reconnect */
+    if (!dir) showConnect('first');
+    else {
+      try {
+        if ((await dir.queryPermission({ mode: 'readwrite' })) === 'granted') await connect(dir);
+        else showConnect('reconnect', dir);
+      } catch (e) {
+        console.error(e);
+        showConnect('reconnect', dir);
+      }
     }
-    showConnect('reconnect', dir);
+    if (partial) toast(`Part of the page didn't load (${partial.message}). Reload in a minute; if you just uploaded an update, GitHub may still be publishing it.`, 'warn');
   }
 
-  boot();
+  boot().catch((e) => {
+    console.error(e);
+    window.sdhStartupError?.(e);
+  });
 })();

@@ -9,7 +9,9 @@
   <link rel="manifest" href="manifest.webmanifest?v=2" />
   <meta name="theme-color" content="#6366f1" />
   <link rel="apple-touch-icon" href="app-icon-192.png" />
-  <link rel="stylesheet" href="styles.css" />
+  <!-- ?v= on styles.css and app.js: changed with each update, so a new page
+       never runs with an old cached app.js or styles.css (or the other way round). -->
+  <link rel="stylesheet" href="styles.css?v=20261123" />
 </head>
 <body class="disconnected">
   <header class="topbar">
@@ -730,6 +732,39 @@
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script src="app.js"></script>
+  <!-- Safety net: if the page is still on "Loading…" after a while (OneDrive
+       still syncing, an update half-downloaded, a startup error), show what to
+       do instead of hanging. Kept outside app.js so it works even if app.js fails. -->
+  <script>
+    (function () {
+      var lastErr = '';
+      function stuck() {
+        var box = document.getElementById('connect-body');
+        return box && document.body.classList.contains('disconnected') && /Loading/.test(box.textContent);
+      }
+      function show(err) {
+        if (!stuck()) return;
+        var box = document.getElementById('connect-body');
+        var msg = err || lastErr;
+        box.innerHTML =
+          '<h2>Still loading</h2>' +
+          '<p class="muted">The team calendar didn\'t finish opening. This usually means OneDrive is still syncing <code>data.json</code> (common first thing in the morning) or an update is still publishing.</p>' +
+          '<button class="btn primary block" id="stuck-reload">Try again</button>' +
+          '<button class="btn ghost block" id="stuck-forget">Choose the folder again</button>' +
+          '<p class="muted small">Make sure OneDrive is running and signed in, and that the Service Desk Hub folder is set to <b>Always keep on this device</b>. Choosing the folder again doesn\'t change any team data.</p>' +
+          (msg ? '<p class="muted small">Details: ' + String(msg).replace(/[<>&]/g, '') + '</p>' : '');
+        document.getElementById('stuck-reload').onclick = function () { location.reload(); };
+        document.getElementById('stuck-forget').onclick = function () {
+          localStorage.setItem('sdh-forget-folder', '1');
+          location.reload();
+        };
+      }
+      window.addEventListener('error', function (e) { lastErr = e.message || lastErr; });
+      window.addEventListener('unhandledrejection', function (e) { lastErr = (e.reason && e.reason.message) || lastErr; });
+      window.sdhStartupError = function (e) { show(e && e.message); };
+      setTimeout(show, 12000);
+    })();
+  </script>
+  <script src="app.js?v=20261123"></script>
 </body>
 </html>
