@@ -109,7 +109,7 @@
   // "Riley Kim" → "Riley K."
   function shortName(name) {
     const parts = name.trim().split(/\s+/);
-    return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.` : parts[0];
+    return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}` : parts[0];
   }
   function fmtTime(t) {
     const [h, m] = t.split(':').map(Number);
@@ -1601,7 +1601,7 @@
         mtgs.map(({ m }) => `\nMeeting: ${m.title}, ${fmtTime(m.startTime)} – ${fmtTime(m.endTime)}`).join('') +
         `\nClick to ${S.admin ? 'add a meeting block or adjust hours' : 'add a meeting block'}`;
       return `<div class="tl-row">
-        <div class="tl-who">${avatar(w.e, 'sm')}<div class="tl-names"><div class="tl-name-row"><span class="tl-name">${esc(w.e.name)}</span><span class="hrs-badge${o ? ' adj' : ''}" style="--c:${w.e.color}" title="${esc(o ? (w.shift.extra ? 'Extra shift' : 'Adjusted hours') : 'Hours today')}">${shownLabel}${o ? (w.shift.extra ? ' <em>extra</em>' : '*') : ''}</span></div><div class="tl-sub">${esc(o?.note || w.e.role || '')}</div></div></div>
+        <div class="tl-who">${avatar(w.e, 'sm')}<div class="tl-names"><div class="tl-name-row"><span class="tl-name" title="${esc(w.e.name)}">${esc(shortName(w.e.name))}</span><span class="hrs-badge${o ? ' adj' : ''}" style="--c:${w.e.color}" title="${esc(o ? (w.shift.extra ? 'Extra shift' : 'Adjusted hours') : 'Hours today')}">${shownLabel}${o ? (w.shift.extra ? ' <em>extra</em>' : '*') : ''}</span></div><div class="tl-sub">${esc(o?.note || w.e.role || '')}</div></div></div>
         <div class="tl-track"><div class="${cls}" data-emp="${w.e.id}" style="--c:${w.e.color};left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(tip)}">${splitBlocks}${brkBlocks}${blocks}${ptoBlocks}${lateBlocks}</div></div>
       </div>`;
     };
@@ -1616,7 +1616,7 @@
         )
         .join('');
       return `<div class="tl-row tl-visit">
-        <div class="tl-who">${avatar(w.e, 'sm')}<div class="tl-names"><div class="tl-name">${esc(w.e.name)}</div><div class="tl-sub">Covering from ${esc(home)}</div></div></div>
+        <div class="tl-who">${avatar(w.e, 'sm')}<div class="tl-names"><div class="tl-name" title="${esc(w.e.name)}">${esc(shortName(w.e.name))}</div><div class="tl-sub">Covering from ${esc(home)}</div></div></div>
         <div class="tl-track">${bars}</div>
       </div>`;
     };
