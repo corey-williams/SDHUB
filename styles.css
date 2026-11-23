@@ -67,6 +67,9 @@ h2 { font-size: 16px; font-weight: 650; }
   display: inline-grid; place-items: center;
 }
 .topbar-right { justify-self: end; display: flex; align-items: center; gap: 10px; }
+.topbar-status { display: flex; align-items: center; gap: 10px; }
+.tab.admin-tab { padding: 7px 12px; border: 1px solid var(--border); background: var(--surface-2); }
+.tab.admin-tab.active { background: var(--surface); }
 .pill {
   display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 99px;
   background: var(--ok-soft); color: #047857; font-size: 12px; font-weight: 600;
@@ -769,4 +772,41 @@ dialog form, dialog .dialog-body { padding: 22px; display: flex; flex-direction:
   .label-row { flex-wrap: wrap; gap: 8px; }
   .tl { --who: 110px; }
   .tl-sub, .tl-who .avatar { display: none; }
+}
+
+/* ---------- Notes tab: meeting notes timeline ---------- */
+.notes-wrap { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+.notes-form.form-card { position: static; }
+.notes-form .card-head { margin-bottom: 0; }
+.notes-form textarea { resize: vertical; min-height: 140px; }
+.notes-form .opt { font-weight: 400; margin-left: 2px; }
+.notes-form .note-row { align-items: end; }
+.note-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.note-actions #note-delete { margin-right: auto; }
+.notes-tools { display: flex; gap: 6px; }
+.timeline { position: relative; padding-left: 26px; display: flex; flex-direction: column; gap: 10px; }
+/* The vertical line */
+.timeline::before { content: ''; position: absolute; left: 8px; top: 8px; bottom: 8px; width: 2px; background: var(--border); border-radius: 1px; }
+.timeline .empty-big { margin-left: -26px; }
+.nt-year { position: relative; margin: 6px 0 -2px -26px; padding-left: 0; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .04em; background: var(--surface); width: max-content; padding-right: 8px; }
+.nt-item { position: relative; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); transition: border-color .15s, box-shadow .15s; }
+.nt-item.open { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); box-shadow: var(--shadow); }
+.nt-item.editing { border-color: var(--accent); }
+.nt-dot { position: absolute; left: -24px; top: 17px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 2.5px solid var(--accent); }
+.nt-item.open .nt-dot { background: var(--accent); }
+.nt-head { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; padding: 11px 14px; border-radius: 12px; }
+.nt-head:hover { background: var(--surface-2); }
+.nt-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.nt-when { display: flex; flex-direction: column; min-width: 170px; }
+.nt-when b { font-weight: 650; }
+.nt-title { font-weight: 600; color: var(--accent); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nt-chev { color: var(--muted); transition: transform .15s; }
+.nt-item.open .nt-chev { transform: rotate(180deg); }
+.nt-body { padding: 0 14px 12px; border-top: 1px solid var(--border); }
+.nt-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; padding: 12px 0; }
+.nt-meta { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+@media (max-width: 700px) {
+  .nt-head { grid-template-columns: 1fr auto; }
+  .nt-when { min-width: 0; }
+  .nt-title { grid-column: 1; }
 }

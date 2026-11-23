@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="app-icon-192.png" />
   <!-- ?v= on styles.css and app.js: changed with each update, so a new page
        never runs with an old cached app.js or styles.css (or the other way round). -->
-  <link rel="stylesheet" href="styles.css?v=20261123" />
+  <link rel="stylesheet" href="styles.css?v=20261123-3" />
 </head>
 <body class="disconnected">
   <header class="topbar">
@@ -27,13 +27,20 @@
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="3.5"/></svg>
         PTO
       </a>
-      <a href="#admin" class="tab" data-tab="admin">
+      <a href="#notes" class="tab" data-tab="notes" id="notes-tab" hidden>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h5"/></svg>
+        Notes
+      </a>
+    </nav>
+    <!-- Admin sits on the right, away from the tabs everyone uses. -->
+    <div class="topbar-right">
+      <div id="admin-status" class="topbar-status"></div>
+      <a href="#admin" class="tab admin-tab" data-tab="admin">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>
         Admin
         <span class="badge" id="pending-badge" hidden></span>
       </a>
-    </nav>
-    <div class="topbar-right" id="admin-status"></div>
+    </div>
   </header>
 
   <!-- CONNECT (shown until the shared folder is picked) -->
@@ -184,6 +191,43 @@
       </div>
     </section>
 
+    <!-- NOTES: meeting notes in a timeline -->
+    <section class="view" id="view-notes" hidden>
+      <div class="notes-wrap">
+        <form class="card form-card notes-form" id="note-form" autocomplete="off" hidden>
+          <div class="card-head">
+            <h2 id="note-form-title">Create meeting notes</h2>
+            <button type="button" class="btn ghost sm" id="note-cancel" hidden>Cancel</button>
+          </div>
+          <div class="row2 note-row">
+            <label>Meeting date <input type="date" name="noteDate" required /></label>
+            <label><span>Title <span class="muted small opt">(optional)</span></span> <input name="noteTitle" maxlength="80" placeholder="Team meeting" /></label>
+          </div>
+          <label>Notes
+            <textarea name="noteBody" rows="7" maxlength="10000" required placeholder="What was discussed, decisions, action items…"></textarea>
+          </label>
+          <div class="note-actions">
+            <button class="btn ghost danger-text" type="button" id="note-delete" hidden>Delete</button>
+            <button class="btn primary" type="submit" id="note-save">Save notes</button>
+          </div>
+        </form>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Meeting notes</h2>
+              <p class="muted small" id="notes-sub"></p>
+            </div>
+            <div class="notes-tools">
+              <button class="btn ghost sm" id="notes-expand">Expand all</button>
+              <button class="btn ghost sm" id="notes-collapse">Collapse all</button>
+            </div>
+          </div>
+          <div id="notes-timeline" class="timeline"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- ADMIN -->
     <section class="view" id="view-admin" hidden>
       <div id="admin-login" class="login-wrap">
@@ -282,6 +326,9 @@
                 <span class="label setting-gap">Split shifts</span>
                 <label class="toggle"><input type="checkbox" id="split-toggle" /> Allow split shifts</label>
                 <p class="muted small">Lets admins and supervisors move part of someone's shift to another region from <b>Adjust hours</b> on the Home tab.</p>
+                <span class="label setting-gap">Notes</span>
+                <label class="toggle"><input type="checkbox" id="notes-toggle" /> Show notes to everyone</label>
+                <p class="muted small">Off: only admins and supervisors see the <b>Notes</b> tab. On: everyone can read it (only admins and supervisors can add or change notes).</p>
               </div>
               <div>
                 <span class="label">Regions</span>
@@ -765,6 +812,6 @@
       setTimeout(show, 12000);
     })();
   </script>
-  <script src="app.js?v=20261123"></script>
+  <script src="app.js?v=20261123-3"></script>
 </body>
 </html>

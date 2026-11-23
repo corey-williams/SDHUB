@@ -745,7 +745,9 @@
           : [...ROLES],
         keySalt: d.settings?.keySalt || null,
         pagingUrl: typeof d.settings?.pagingUrl === 'string' ? d.settings.pagingUrl : '',
+        showNotes: !!d.settings?.showNotes,
       },
+      notes: Array.isArray(d.notes) ? d.notes.filter((n) => n && n.id && DATE_RE.test(n.date || '') && typeof n.body === 'string') : [],
       employees: Array.isArray(d.employees) ? d.employees : [],
       pto: Array.isArray(d.pto) ? d.pto : [],
       overrides: Array.isArray(d.overrides) ? d.overrides : [],
@@ -1102,11 +1104,17 @@
   }
 
   // ---------- routing ----------
+  // Notes: admins and supervisors always; everyone when "Show notes to everyone" is on.
+  function canSeeNotes() {
+    return S.admin || !!S.data?.settings.showNotes;
+  }
   function currentTab() {
     const t = location.hash.slice(1);
+    if (t === 'notes') return canSeeNotes() ? 'notes' : 'home';
     return ['home', 'pto', 'admin'].includes(t) ? t : 'home';
   }
   function showTab() {
+    $('#notes-tab').hidden = !canSeeNotes();
     const tab = currentTab();
     $$('.tab').forEach((a) => a.classList.toggle('active', a.dataset.tab === tab));
     $$('.view').forEach((v) => (v.hidden = v.id !== 'view-' + tab));
@@ -1131,6 +1139,8 @@
       toast('Your supervisor access was removed', true);
     }
     renderTopbar();
+    showTab();
+    renderNotes();
     renderHome();
     renderPtoFilters();
     renderCalendar();
@@ -1150,6 +1160,85 @@
       (S.role
         ? `<span class="pill ${S.role}">● ${S.role === 'admin' ? 'Admin' : `Supervisor · ${esc(firstName(emp(S.supId)?.name || ''))}`}</span><button class="btn ghost sm" id="logout">Sign out</button>`
         : '');
+  }
+
+  // ---------- Notes: meeting notes timeline ----------
+  function noteAuthor() {
+    return S.role === 'supervisor' ? emp(S.supId)?.name || 'Supervisor' : 'Admin';
+  }
+  function relDay(ds) {
+    const n = daysBetween(ymd(new Date()), ds) - 1;
+    if (n === 0) return 'Today';
+    if (n === -1) return 'Yesterday';
+    if (n === 1) return 'Tomorrow';
+    return n < 0 ? `${-n} days ago` : `in ${n} days`;
+  }
+  function renderNotes() {
+    if (!S.data) return;
+    $('#note-form').hidden = !S.admin;
+    $('#notes-toggle').checked = !!S.data.settings.showNotes;
+    const notes = [...S.data.notes].sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || '').localeCompare(a.createdAt || ''));
+    S.notesOpen = S.notesOpen || new Set(notes.slice(0, 1).map((n) => n.id)); // newest starts open
+    $('#notes-sub').textContent = notes.length ? `${notes.length} meeting${notes.length === 1 ? '' : 's'}, newest first` : '';
+    $('#notes-expand').hidden = $('#notes-collapse').hidden = notes.length < 2;
+    if (!notes.length) {
+      $('#notes-timeline').innerHTML = `<div class="empty-big">No meeting notes yet.${S.admin ? ' Add the first one above.' : ''}</div>`;
+      return;
+    }
+    let lastYear = String(new Date().getFullYear());
+    $('#notes-timeline').innerHTML = notes
+      .map((n) => {
+        const open = S.notesOpen.has(n.id);
+        const y = n.date.slice(0, 4);
+        const yearMark = y !== lastYear ? `<div class="nt-year">${y}</div>` : '';
+        lastYear = y;
+        const when = fmtDate(n.date, { weekday: 'long', month: 'long', day: 'numeric', year: y === String(new Date().getFullYear()) ? undefined : 'numeric' });
+        const edited = n.updatedAt && n.updatedAt !== n.createdAt ? ` · edited ${new Date(n.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : '';
+        return `${yearMark}<article class="nt-item${open ? ' open' : ''}${S.noteEditing === n.id ? ' editing' : ''}" data-note="${esc(n.id)}">
+          <span class="nt-dot"></span>
+          <button type="button" class="nt-head" data-note-toggle="${esc(n.id)}" aria-expanded="${open}">
+            <span class="nt-when"><b>${esc(when)}</b><span class="muted small">${esc(relDay(n.date))}</span></span>
+            <span class="nt-title">${esc(n.title || 'Team meeting')}</span>
+            <svg class="nt-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          ${open ? `<div class="nt-body">
+            <div class="nt-text">${esc(n.body)}</div>
+            <div class="nt-meta"><span class="muted small">${n.author ? `Added by ${esc(n.author)}` : ''}${esc(edited)}</span>${S.admin ? `<span><button type="button" class="btn ghost xs" data-note-edit="${esc(n.id)}">Edit</button> <button type="button" class="btn ghost xs danger-text" data-note-del="${esc(n.id)}">Delete</button></span>` : ''}</div>
+          </div>` : ''}
+        </article>`;
+      })
+      .join('');
+  }
+  function resetNoteForm() {
+    const f = $('#note-form');
+    S.noteEditing = null;
+    f.reset();
+    f.noteDate.value = ymd(new Date());
+    $('#note-form-title').textContent = 'Create meeting notes';
+    $('#note-save').textContent = 'Save notes';
+    $('#note-cancel').hidden = $('#note-delete').hidden = true;
+  }
+  function editNote(id) {
+    const n = S.data.notes.find((x) => x.id === id);
+    if (!n) return;
+    const f = $('#note-form');
+    S.noteEditing = id;
+    f.noteDate.value = n.date;
+    f.noteTitle.value = n.title || '';
+    f.noteBody.value = n.body;
+    $('#note-form-title').textContent = 'Edit meeting notes';
+    $('#note-save').textContent = 'Save changes';
+    $('#note-cancel').hidden = $('#note-delete').hidden = false;
+    renderNotes();
+    f.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    f.noteBody.focus();
+  }
+  async function deleteNote(id) {
+    const n = S.data.notes.find((x) => x.id === id);
+    if (!n) return;
+    if (!(await confirmBox('Delete meeting notes?', `This removes the notes for ${n.title || 'Team meeting'} on ${fmtDate(n.date, { weekday: 'short', month: 'short', day: 'numeric' })}. It can't be undone here (OneDrive version history still has it).`, 'Delete'))) return;
+    const ok = await mutate((d) => { d.notes = (d.notes || []).filter((x) => x.id !== id); }, 'Notes deleted');
+    if (ok && S.noteEditing === id) { resetNoteForm(); renderNotes(); }
   }
 
   // ---------- Home: day breakdown ----------
@@ -3219,6 +3308,54 @@
         if (!ok) ev.target.checked = !on;
       });
     });
+
+    // Notes visible to everyone on/off
+    $('#notes-toggle').addEventListener('change', (ev) => {
+      const on = ev.target.checked;
+      mutate((d) => { d.settings.showNotes = on; }, `Notes ${on ? 'shown to everyone' : 'limited to admins and supervisors'}`).then((ok) => {
+        if (!ok) ev.target.checked = !on;
+      });
+    });
+
+    // Notes tab: create / edit / delete, expand / collapse
+    resetNoteForm();
+    $('#note-form').onsubmit = async (ev) => {
+      ev.preventDefault();
+      if (!S.admin) return;
+      const f = ev.target;
+      const date = f.noteDate.value, title = f.noteTitle.value.trim().slice(0, 80), body = f.noteBody.value.trim().slice(0, 10000);
+      if (!DATE_RE.test(date)) return toast('Pick the meeting date', true);
+      if (!body) return toast('Add the meeting notes', true);
+      const id = S.noteEditing;
+      const now = new Date().toISOString();
+      const ok = await mutate((d) => {
+        d.notes = d.notes || [];
+        if (id) Object.assign(findIn(d.notes, id, 'note'), { date, title, body, updatedAt: now });
+        else d.notes.push({ id: uid(), kind: 'meeting', date, title, body, author: noteAuthor(), createdAt: now, updatedAt: now });
+      }, id ? 'Notes updated' : 'Notes saved');
+      if (ok) {
+        const newest = !id && [...S.data.notes].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0];
+        if (newest) S.notesOpen.add(newest.id);
+        resetNoteForm();
+        renderNotes();
+      }
+    };
+    $('#note-cancel').onclick = () => { resetNoteForm(); renderNotes(); };
+    $('#note-delete').onclick = () => S.noteEditing && deleteNote(S.noteEditing);
+    $('#notes-timeline').addEventListener('click', (ev) => {
+      const t = ev.target.closest('[data-note-toggle]');
+      if (t) {
+        const id = t.dataset.noteToggle;
+        S.notesOpen.has(id) ? S.notesOpen.delete(id) : S.notesOpen.add(id);
+        return renderNotes();
+      }
+      const e = ev.target.closest('[data-note-edit]');
+      if (e) return editNote(e.dataset.noteEdit);
+      const x = ev.target.closest('[data-note-del]');
+      if (x) deleteNote(x.dataset.noteDel);
+    });
+    $('#notes-expand').onclick = () => { S.notesOpen = new Set(S.data.notes.map((n) => n.id)); renderNotes(); };
+    $('#notes-collapse').onclick = () => { S.notesOpen = new Set(); renderNotes(); };
 
     // holidays
     $('#hol-prev').onclick = () => { S.holYear = (S.holYear || new Date().getFullYear()) - 1; renderHolidays(); };
