@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="app-icon-192.png" />
   <!-- ?v= on styles.css and app.js: changed with each update, so a new page
        never runs with an old cached app.js or styles.css (or the other way round). -->
-  <link rel="stylesheet" href="styles.css?v=20261123-3" />
+  <link rel="stylesheet" href="styles.css?v=20261123-9" />
 </head>
 <body class="disconnected">
   <header class="topbar">
@@ -203,9 +203,39 @@
             <label>Meeting date <input type="date" name="noteDate" required /></label>
             <label><span>Title <span class="muted small opt">(optional)</span></span> <input name="noteTitle" maxlength="80" placeholder="Team meeting" /></label>
           </div>
-          <label>Notes
-            <textarea name="noteBody" rows="7" maxlength="10000" required placeholder="What was discussed, decisions, action items…"></textarea>
-          </label>
+          <div class="rte-field">
+            <span class="label" id="note-editor-label">Notes</span>
+            <div class="rte">
+              <div class="rte-bar" id="note-toolbar" role="toolbar" aria-label="Formatting">
+                <button type="button" data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+                <button type="button" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+                <button type="button" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>
+                <button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+                <span class="rte-sep"></span>
+                <button type="button" data-cmd="heading" title="Heading">H</button>
+                <button type="button" data-cmd="insertUnorderedList" title="Bullet list">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.3" fill="currentColor" stroke="none"/></svg>
+                </button>
+                <button type="button" data-cmd="insertOrderedList" title="Numbered list">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10 6h10M10 12h10M10 18h10"/><text x="2.5" y="8.5" font-size="7" font-weight="700" fill="currentColor" stroke="none">1</text><text x="2.5" y="14.5" font-size="7" font-weight="700" fill="currentColor" stroke="none">2</text><text x="2.5" y="20.5" font-size="7" font-weight="700" fill="currentColor" stroke="none">3</text></svg>
+                </button>
+                <button type="button" data-cmd="outdent" title="Decrease indent (Shift+Tab)">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M11 6h9M11 12h9M11 18h9M7 9l-3 3 3 3"/></svg>
+                </button>
+                <button type="button" data-cmd="indent" title="Increase indent (Tab)">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M11 6h9M11 12h9M11 18h9M4 9l3 3-3 3"/></svg>
+                </button>
+                <span class="rte-sep"></span>
+                <button type="button" data-cmd="link" title="Add link">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>
+                </button>
+                <button type="button" data-cmd="removeFormat" title="Clear formatting">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 5h12M12 5l-3 14M4 20l16-16"/></svg>
+                </button>
+              </div>
+              <div id="note-editor" class="rte-body nt-rich" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="note-editor-label" data-placeholder="What was discussed, decisions, action items…"></div>
+            </div>
+          </div>
           <div class="note-actions">
             <button class="btn ghost danger-text" type="button" id="note-delete" hidden>Delete</button>
             <button class="btn primary" type="submit" id="note-save">Save notes</button>
@@ -222,6 +252,10 @@
               <button class="btn ghost sm" id="notes-expand">Expand all</button>
               <button class="btn ghost sm" id="notes-collapse">Collapse all</button>
             </div>
+          </div>
+          <div class="notes-search" id="notes-search-wrap">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+            <input type="search" id="notes-search" placeholder="Search meeting notes, e.g. laptops, Riley, November" autocomplete="off" aria-label="Search meeting notes" />
           </div>
           <div id="notes-timeline" class="timeline"></div>
         </div>
@@ -362,7 +396,16 @@
             <p class="muted small note">Saved only in <code>data.json</code> in your OneDrive folder, never in the page files on GitHub. Leave it empty and click Save to clear it.</p>
           </div>
           <div class="card pin-card admin-only">
-            <div class="card-head"><h2>Admin PIN</h2></div>
+            <div class="card-head"><h2>Admin Area</h2></div>
+            <form id="admin-name-form" autocomplete="off">
+              <span class="label">Admin name</span>
+              <div class="pin-row">
+                <input name="adminName" maxlength="60" placeholder="Your name" class="admin-name-input" />
+                <button class="btn ghost sm" type="submit">Save</button>
+              </div>
+              <p class="muted small note">Shown as "Added by …" on meeting notes you add, instead of "Admin".</p>
+            </form>
+            <span class="label setting-gap">Admin PIN</span>
             <form id="pin-form" autocomplete="off">
               <div class="pin-row">
                 <input type="password" name="newpin" placeholder="New PIN" required />
@@ -549,6 +592,7 @@
         </button>
       </div>
       <div class="pe-who" id="pe-who"></div>
+      <p class="muted small by-line" id="pe-by" hidden></p>
       <div class="row2">
         <label>Start date <input type="date" name="start" required /></label>
         <label>End date <input type="date" name="end" required /></label>
@@ -677,6 +721,7 @@
         </button>
       </div>
       <p class="muted small" id="ovr-usual"></p>
+      <p class="muted small by-line" id="ovr-by" hidden></p>
       <div class="seg" id="ovr-mode">
         <button type="button" data-mode="hours" class="on">Change hours</button>
         <button type="button" data-mode="split" id="ovr-mode-split">Split shift</button>
@@ -812,6 +857,6 @@
       setTimeout(show, 12000);
     })();
   </script>
-  <script src="app.js?v=20261123-3"></script>
+  <script src="app.js?v=20261123-9"></script>
 </body>
 </html>

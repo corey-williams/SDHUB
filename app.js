@@ -746,6 +746,7 @@
         keySalt: d.settings?.keySalt || null,
         pagingUrl: typeof d.settings?.pagingUrl === 'string' ? d.settings.pagingUrl : '',
         showNotes: !!d.settings?.showNotes,
+        adminName: typeof d.settings?.adminName === 'string' ? d.settings.adminName.trim().slice(0, 60) : '',
       },
       notes: Array.isArray(d.notes) ? d.notes.filter((n) => n && n.id && DATE_RE.test(n.date || '') && typeof n.body === 'string') : [],
       employees: Array.isArray(d.employees) ? d.employees : [],
@@ -1158,13 +1159,34 @@
     $('#admin-status').innerHTML =
       `<span class="sync" title="Saving to ${esc(S.dir?.name || '')}/${DATA_FILE}${synced ? ' · last change ' + esc(synced) : ''}"><i></i>${esc(S.dir?.name || '')}</span>` +
       (S.role
-        ? `<span class="pill ${S.role}">● ${S.role === 'admin' ? 'Admin' : `Supervisor · ${esc(firstName(emp(S.supId)?.name || ''))}`}</span><button class="btn ghost sm" id="logout">Sign out</button>`
+        ? `<span class="pill ${S.role}">● ${S.role === 'admin' ? `Admin${adminName() ? ` · ${esc(firstName(adminName()))}` : ''}` : `Supervisor · ${esc(firstName(emp(S.supId)?.name || ''))}`}</span><button class="btn ghost sm" id="logout">Sign out</button>`
         : '');
   }
 
   // ---------- Notes: meeting notes timeline ----------
+  function adminName() {
+    return (S.data?.settings.adminName || '').trim();
+  }
   function noteAuthor() {
-    return S.role === 'supervisor' ? emp(S.supId)?.name || 'Supervisor' : 'Admin';
+    return S.role === 'supervisor' ? emp(S.supId)?.name || 'Supervisor' : adminName() || 'Admin';
+  }
+  // Who's signed in, for "Approved by …", "Set by …" and notes.
+  const actorName = () => noteAuthor();
+  const stamp = () => ({ setBy: actorName(), setAt: new Date().toISOString() });
+  // Saved before the admin had a name, it says "Admin": show the name now.
+  // First name only, e.g. "Approved by Corey".
+  function whoLabel(name) {
+    const full = name === 'Admin' && adminName() ? adminName() : name || '';
+    return full ? firstName(full) : '';
+  }
+  function authorLabel(n) {
+    return n.author ? whoLabel(n.author) : '';
+  }
+  // "Approved by Corey Williams · Nov 23"
+  function byLine(verb, name, iso) {
+    if (!name) return '';
+    const when = iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+    return `${verb} by ${whoLabel(name)}${when ? ` · ${when}` : ''}`;
   }
   function relDay(ds) {
     const n = daysBetween(ymd(new Date()), ds) - 1;
@@ -1177,18 +1199,37 @@
     if (!S.data) return;
     $('#note-form').hidden = !S.admin;
     $('#notes-toggle').checked = !!S.data.settings.showNotes;
-    const notes = [...S.data.notes].sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || '').localeCompare(a.createdAt || ''));
-    S.notesOpen = S.notesOpen || new Set(notes.slice(0, 1).map((n) => n.id)); // newest starts open
-    $('#notes-sub').textContent = notes.length ? `${notes.length} meeting${notes.length === 1 ? '' : 's'}, newest first` : '';
-    $('#notes-expand').hidden = $('#notes-collapse').hidden = notes.length < 2;
-    if (!notes.length) {
+    const all = [...S.data.notes].sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || '').localeCompare(a.createdAt || ''));
+    S.notesOpen = S.notesOpen || new Set(all.slice(0, 1).map((n) => n.id)); // newest starts open
+    $('#notes-search-wrap').hidden = !all.length;
+    // Search: every word must appear somewhere in the meeting (title, notes or date).
+    const terms = (S.noteQuery || '').toLowerCase().split(/\s+/).filter(Boolean);
+    const whenText = (n) => fmtDate(n.date, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    const notes = terms.length
+      ? all.filter((n) => {
+          const hay = `${n.title || 'Team meeting'} ${n.body || ''} ${whenText(n)} ${n.date}`.toLowerCase();
+          return terms.every((t) => hay.includes(t));
+        })
+      : all;
+    $('#notes-sub').textContent = !all.length
+      ? ''
+      : terms.length
+        ? `${notes.length} of ${all.length} meeting${all.length === 1 ? '' : 's'} match`
+        : `${all.length} meeting${all.length === 1 ? '' : 's'}, newest first`;
+    $('#notes-expand').hidden = $('#notes-collapse').hidden = notes.length < 2 || !!terms.length;
+    if (!all.length) {
       $('#notes-timeline').innerHTML = `<div class="empty-big">No meeting notes yet.${S.admin ? ' Add the first one above.' : ''}</div>`;
+      return;
+    }
+    if (!notes.length) {
+      $('#notes-timeline').innerHTML = `<div class="empty-big">No meetings mention “${esc(S.noteQuery.trim())}”.</div>`;
       return;
     }
     let lastYear = String(new Date().getFullYear());
     $('#notes-timeline').innerHTML = notes
       .map((n) => {
-        const open = S.notesOpen.has(n.id);
+        // While searching, every match is shown open with the words highlighted.
+        const open = terms.length ? true : S.notesOpen.has(n.id);
         const y = n.date.slice(0, 4);
         const yearMark = y !== lastYear ? `<div class="nt-year">${y}</div>` : '';
         lastYear = y;
@@ -1198,21 +1239,47 @@
           <span class="nt-dot"></span>
           <button type="button" class="nt-head" data-note-toggle="${esc(n.id)}" aria-expanded="${open}">
             <span class="nt-when"><b>${esc(when)}</b><span class="muted small">${esc(relDay(n.date))}</span></span>
-            <span class="nt-title">${esc(n.title || 'Team meeting')}</span>
+            <span class="nt-title">${markTerms(esc(n.title || 'Team meeting'), terms)}</span>
             <svg class="nt-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9l6 6 6-6"/></svg>
           </button>
           ${open ? `<div class="nt-body">
-            <div class="nt-text">${esc(n.body)}</div>
-            <div class="nt-meta"><span class="muted small">${n.author ? `Added by ${esc(n.author)}` : ''}${esc(edited)}</span>${S.admin ? `<span><button type="button" class="btn ghost xs" data-note-edit="${esc(n.id)}">Edit</button> <button type="button" class="btn ghost xs danger-text" data-note-del="${esc(n.id)}">Delete</button></span>` : ''}</div>
+            <div class="nt-text nt-rich">${markTerms(noteHtml(n), terms)}</div>
+            <div class="nt-meta"><span class="muted small">${n.author ? `Added by ${esc(authorLabel(n))}` : ''}${esc(edited)}</span>${S.admin ? `<span><button type="button" class="btn ghost xs" data-note-edit="${esc(n.id)}">Edit</button> <button type="button" class="btn ghost xs danger-text" data-note-del="${esc(n.id)}">Delete</button></span>` : ''}</div>
           </div>` : ''}
         </article>`;
       })
       .join('');
   }
+  // Wraps search words in <mark>, only inside text (never inside tags or links' addresses).
+  function markTerms(html, terms) {
+    if (!terms?.length) return html;
+    const re = new RegExp(`(${terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const t of nodes) {
+      if (!re.test(t.data)) continue;
+      re.lastIndex = 0;
+      const frag = document.createDocumentFragment();
+      t.data.split(re).forEach((part, i) => {
+        if (!part) return;
+        if (i % 2) {
+          const m = document.createElement('mark');
+          m.textContent = part;
+          frag.append(m);
+        } else frag.append(part);
+      });
+      t.replaceWith(frag);
+    }
+    return box.innerHTML;
+  }
   function resetNoteForm() {
     const f = $('#note-form');
     S.noteEditing = null;
     f.reset();
+    $('#note-editor').innerHTML = '';
     f.noteDate.value = ymd(new Date());
     $('#note-form-title').textContent = 'Create meeting notes';
     $('#note-save').textContent = 'Save notes';
@@ -1225,13 +1292,137 @@
     S.noteEditing = id;
     f.noteDate.value = n.date;
     f.noteTitle.value = n.title || '';
-    f.noteBody.value = n.body;
+    $('#note-editor').innerHTML = noteHtml(n);
     $('#note-form-title').textContent = 'Edit meeting notes';
     $('#note-save').textContent = 'Save changes';
     $('#note-cancel').hidden = $('#note-delete').hidden = false;
     renderNotes();
     f.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    f.noteBody.focus();
+    $('#note-editor').focus();
+  }
+
+  // ---------- rich text for notes ----------
+  // Notes are stored as HTML, but only a short list of formatting tags is ever
+  // kept (anything else, e.g. scripts or styles pasted from Word or typed into
+  // data.json by hand, is stripped), both when saving and when showing.
+  const RICH_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'P', 'DIV', 'BR', 'UL', 'OL', 'LI', 'H3', 'H4', 'A', 'BLOCKQUOTE']);
+  const RICH_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'TEMPLATE', 'SVG', 'MATH', 'IMG', 'VIDEO', 'AUDIO', 'FORM', 'INPUT', 'BUTTON', 'SELECT', 'TEXTAREA', 'LINK', 'META', 'HEAD', 'TITLE']);
+  const RICH_RENAME = { H1: 'H3', H2: 'H3', H5: 'H4', H6: 'H4' };
+  function sanitizeRich(html) {
+    const doc = new DOMParser().parseFromString(`<body>${html || ''}</body>`, 'text/html');
+    const out = document.createElement('div');
+    const copy = (src, dst) => {
+      for (const node of [...src.childNodes]) {
+        if (node.nodeType === 3) { dst.append(node.textContent); continue; }
+        if (node.nodeType !== 1) continue; // comments etc.
+        let tag = node.tagName;
+        if (RICH_DROP.has(tag)) continue;
+        tag = RICH_RENAME[tag] || tag;
+        // Word/Docs often mark bold/italic with styles on a span.
+        const st = node.getAttribute('style') || '';
+        if (!RICH_TAGS.has(tag)) {
+          let target = dst;
+          if (/font-weight\s*:\s*(bold|[6-9]00)/i.test(st)) target = target.appendChild(document.createElement('b'));
+          if (/font-style\s*:\s*italic/i.test(st)) target = target.appendChild(document.createElement('i'));
+          if (/text-decoration[^;]*underline/i.test(st)) target = target.appendChild(document.createElement('u'));
+          copy(node, target); // unknown tag: keep its text, drop the tag
+          continue;
+        }
+        const el = document.createElement(tag.toLowerCase());
+        if (tag === 'A') {
+          const href = (node.getAttribute('href') || '').trim();
+          if (!/^(https?:|mailto:)/i.test(href)) { copy(node, dst); continue; }
+          el.setAttribute('href', href);
+          el.setAttribute('target', '_blank');
+          el.setAttribute('rel', 'noopener noreferrer');
+        }
+        copy(node, el);
+        dst.append(el);
+      }
+    };
+    copy(doc.body, out);
+    return out.innerHTML;
+  }
+  // Older notes were plain text: show them with their line breaks.
+  function noteHtml(n) {
+    if (typeof n.html === 'string' && n.html) return sanitizeRich(n.html);
+    return esc(n.body || '').replace(/\n/g, '<br>');
+  }
+  function richToText(html) {
+    const d = document.createElement('div');
+    d.innerHTML = html.replace(/<br\s*\/?>/gi, '\n').replace(/<(p|div|li|h3|h4|ul|ol|blockquote)\b/gi, '\n$&');
+    return d.textContent.replace(/[ \t]*\n[ \t]*/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  function bindRichEditor() {
+    const ed = $('#note-editor');
+    const bar = $('#note-toolbar');
+    try { document.execCommand('defaultParagraphSeparator', false, 'div'); } catch { /* older browsers */ }
+    const refresh = () => {
+      for (const b of $$('button[data-cmd]', bar)) {
+        const c = b.dataset.cmd;
+        let on = false;
+        try {
+          if (c === 'heading') on = /^h[34]$/i.test(document.queryCommandValue('formatBlock'));
+          else if (!['indent', 'outdent', 'link', 'removeFormat'].includes(c)) on = document.queryCommandState(c);
+        } catch { /* ignore */ }
+        b.classList.toggle('on', on && ed.contains(document.getSelection()?.anchorNode));
+      }
+    };
+    // Keep the text selection when clicking a toolbar button.
+    bar.addEventListener('mousedown', (ev) => { if (ev.target.closest('button')) ev.preventDefault(); });
+    bar.addEventListener('click', (ev) => {
+      const b = ev.target.closest('button[data-cmd]');
+      if (!b) return;
+      ed.focus();
+      const c = b.dataset.cmd;
+      // An empty box has no line yet for a heading or list to apply to: add one.
+      if (!ed.textContent.trim() && !ed.querySelector('li, h3, h4')) {
+        ed.innerHTML = '<div><br></div>';
+        const r = document.createRange();
+        r.setStart(ed.firstChild, 0);
+        r.collapse(true);
+        const sel = document.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      if (c === 'heading') {
+        const isH = /^h[34]$/i.test(document.queryCommandValue('formatBlock'));
+        document.execCommand('formatBlock', false, isH ? 'div' : 'h3');
+      } else if (c === 'link') {
+        const sel = document.getSelection();
+        if (!sel || sel.isCollapsed) return toast('Select the text to turn into a link first', 'warn');
+        let url = (prompt('Link address (https://…)', 'https://') || '').trim();
+        if (!url || url === 'https://') return;
+        if (!/^(https?:|mailto:)/i.test(url)) url = 'https://' + url;
+        document.execCommand('createLink', false, url);
+      } else if (c === 'removeFormat') {
+        document.execCommand('removeFormat');
+        document.execCommand('unlink');
+        document.execCommand('formatBlock', false, 'div');
+      } else document.execCommand(c);
+      refresh();
+    });
+    // Tab / Shift+Tab indent and outdent inside lists.
+    ed.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Tab') {
+        ev.preventDefault();
+        document.execCommand(ev.shiftKey ? 'outdent' : 'indent');
+      }
+    });
+    // Pasting from Word, Outlook, Teams or a web page keeps simple formatting only.
+    ed.addEventListener('paste', (ev) => {
+      const html = ev.clipboardData?.getData('text/html');
+      const text = ev.clipboardData?.getData('text/plain') || '';
+      ev.preventDefault();
+      if (html) document.execCommand('insertHTML', false, sanitizeRich(html.replace(/^[\s\S]*<!--StartFragment-->|<!--EndFragment-->[\s\S]*$/g, '')));
+      else document.execCommand('insertText', false, text);
+    });
+    ed.addEventListener('input', () => {
+      // Leave it truly empty so the placeholder shows again.
+      if (!ed.textContent.trim() && !ed.querySelector('li, h3, h4')) ed.innerHTML = '';
+    });
+    document.addEventListener('selectionchange', () => { if (document.activeElement === ed) refresh(); });
+    ed.addEventListener('blur', refresh);
   }
   async function deleteNote(id) {
     const n = S.data.notes.find((x) => x.id === id);
@@ -1389,7 +1580,7 @@
       const lateBlocks = lates
         .map(
           ({ a, from, to, leaving }) =>
-            `<div class="mtg late-block" style="left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="${leaving ? `Leaving early at ${fmtTime(a.arriveAt)}` : `Late: in at ${fmtTime(a.arriveAt)}`}${a.note ? ` — ${esc(a.note)}` : ''}"><span class="mtg-name">${leaving ? 'Leaving early' : 'Late'}</span></div>`
+            `<div class="mtg late-block" style="left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="${leaving ? `Leaving early at ${fmtTime(a.arriveAt)}` : `Late: in at ${fmtTime(a.arriveAt)}`}${a.note ? ` — ${esc(a.note)}` : ''}${a.setBy ? `\n${esc(byLine('Set', a.setBy, a.setAt))}` : ''}"><span class="mtg-name">${leaving ? 'Leaving early' : 'Late'}</span></div>`
         )
         .join('');
       // Split shift: the part worked for another region, in that region's color.
@@ -1399,14 +1590,14 @@
           ({ sp, region, from, to }) =>
             `<div class="split" data-split="${sp.id}" style="--r:${REGION_COLORS[region]};left:${((from - s) / (e - s)) * 100}%;width:${((to - from) / (e - s)) * 100}%" title="Covering ${esc(region)}: ${minToTime(from)} – ${minToTime(to)}${
               sp.repeat !== 'none' ? ` (${sp.repeat === 'daily' ? 'every day' : 'every week'})` : ''
-            }${S.admin ? '\nClick to change' : ''}"><span>${sp.repeat !== 'none' ? '↻ ' : ''}${esc(region)}</span></div>`
+            }${sp.setBy ? `\n${esc(byLine('Set', sp.setBy, sp.setAt))}` : ''}${S.admin ? '\nClick to change' : ''}"><span>${sp.repeat !== 'none' ? '↻ ' : ''}${esc(region)}</span></div>`
         )
         .join('');
       const tip =
         `${w.e.name}: ${label}` +
         splits.map((x) => `\nCovering ${x.region}: ${minToTime(x.from)} – ${minToTime(x.to)}`).join('') +
         brks.map(({ b }) => `\n${b.label}: ${fmtBreak(b)}`).join('') +
-        (o ? ` (${w.shift.extra ? 'extra shift' : 'adjusted'}${o.note ? ': ' + o.note : ''})` : '') +
+        (o ? ` (${w.shift.extra ? 'extra shift' : 'adjusted'}${o.note ? ': ' + o.note : ''})${o.setBy ? `\n${byLine(w.shift.extra ? 'Extra shift added' : 'Adjusted', o.setBy, o.setAt)}` : ''}` : '') +
         (w.pending ? ' (PTO pending)' : '') +
         mtgs.map(({ m }) => `\nMeeting: ${m.title}, ${fmtTime(m.startTime)} – ${fmtTime(m.endTime)}`).join('') +
         `\nClick to ${S.admin ? 'add a meeting block or adjust hours' : 'add a meeting block'}`;
@@ -1607,7 +1798,7 @@
         .map(({ e, absence: a }) =>
           personRow(
             e,
-            `<span class="ooo-right"><span class="tag absent">${esc(a.reason)}</span>${S.admin ?`<button class="btn ghost icon xs" data-unabsent="${a.id}" data-unabsent-emp="${e.id}" title="Edit or remove" aria-label="Edit absence for ${esc(e.name)}"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>` : ''}</span>`,
+            `<span class="ooo-right"><span class="tag absent"${a.setBy ? ` title="${esc(byLine('Set', a.setBy, a.setAt))}"` : ''}>${esc(a.reason)}</span>${S.admin ?`<button class="btn ghost icon xs" data-unabsent="${a.id}" data-unabsent-emp="${e.id}" title="Edit or remove" aria-label="Edit absence for ${esc(e.name)}"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>` : ''}</span>`,
             // Just who and their region; the tag says why.
             sub(e, '')
           )
@@ -1794,7 +1985,7 @@
         .map((sg) => {
           const what = absenceLabel(sg.a);
           const cls = ['pto-bar', 'abs-bar', sg.contL && 'cont-l', sg.contR && 'cont-r'].filter(Boolean).join(' ');
-          const tip = `${sg.e.name}: ${what}, ${fmtRange(sg.a.start, sg.a.end)}${sg.a.note ? ` — ${sg.a.note}` : ''}${S.admin ? '\nClick to change' : ''}`;
+          const tip = `${sg.e.name}: ${what}, ${fmtRange(sg.a.start, sg.a.end)}${sg.a.note ? ` — ${sg.a.note}` : ''}${sg.a.setBy ? `\n${byLine('Set', sg.a.setBy, sg.a.setAt)}` : ''}${S.admin ? '\nClick to change' : ''}`;
           return `<div class="${cls}" data-abs="${sg.a.id}" style="--c:${sg.e.color};grid-column:${sg.col + 1} / span ${sg.span};grid-row:${sg.lane + 1}" title="${esc(tip)}">${esc(shortName(sg.e.name))} <b>${esc(what)}</b></div>`;
         })
         .join('');
@@ -1804,7 +1995,7 @@
           const pending = sg.p.status === 'pending';
           const cls = ['pto-bar', pending && 'pending', sg.contL && 'cont-l', sg.contR && 'cont-r'].filter(Boolean).join(' ');
           const hours = isPartial(sg.p) ? ptoHours(sg.p) : '';
-          const tip = `${sg.e.name}: ${fmtRange(sg.p.start, sg.p.end)}${hours ? `, ${hours}` : ''}${pending ? ' (pending approval)' : ''}${sg.p.note ? ` — ${sg.p.note}` : ''}`;
+          const tip = `${sg.e.name}: ${fmtRange(sg.p.start, sg.p.end)}${hours ? `, ${hours}` : ''}${pending ? ' (pending approval)' : ''}${sg.p.note ? ` — ${sg.p.note}` : ''}${sg.p.decidedBy ? `\n${byLine('Approved', sg.p.decidedBy, sg.p.decidedAt)}` : ''}`;
           return `<div class="${cls}${hours ? ' partial' : ''}" data-pto="${sg.p.id}" style="--c:${sg.e.color};grid-column:${sg.col + 1} / span ${sg.span};grid-row:${sg.lane + 1}" title="${esc(tip)}">${esc(shortName(sg.e.name))}${hours ? ` <b>${esc(hours)}</b>` : ''}${pending ? ' <em>pending</em>' : ''}</div>`;
         })
         .join('');
@@ -1873,6 +2064,7 @@
           isPartial(p) ? `${esc(ptoHours(p))}${days > 1 ? ` on ${days} days` : ''}` : `${days} day${days === 1 ? '' : 's'}`
         }</div>
         ${p.note ? `<div class="req-note">“${esc(p.note)}”</div>` : ''}
+        ${p.decidedBy ? `<div class="req-by">${esc(byLine(p.status === 'denied' ? 'Denied' : 'Approved', p.decidedBy, p.decidedAt))}</div>` : ''}
       </div>
       <div class="req-actions">${btns}</div>
     </div>`;
@@ -2000,6 +2192,8 @@
       }).join('');
 
     // On-call paging link (kept in data.json only). Don't overwrite while someone is typing.
+    const an = $('#admin-name-form').adminName;
+    if (document.activeElement !== an && !S.adminNameDirty) an.value = S.data.settings.adminName || '';
     const pg = $('#paging-form').pagingUrl;
     const url = S.data.settings.pagingUrl || '';
     if (document.activeElement !== pg && !S.pagingDirty) pg.value = url;
@@ -2594,6 +2788,14 @@
     $('#abs-delete').hidden = mode !== 'absent' || !S.absEditing;
     const e = emp(S.ovrEmp);
     if (e) $('#ovr-title').textContent = `${mode === 'split' ? 'Split shift' : mode === 'absent' ? 'Absent' : S.ovrTitleBase}: ${e.name}`;
+    // Who set the adjustment, split or call-in being edited.
+    const item =
+      mode === 'split' ? S.splitEditing && S.splits.find((x) => x.id === S.splitEditing)
+      : mode === 'absent' ? S.absEditing && (S.data?.absences || []).find((x) => x.id === S.absEditing)
+      : S.ovrExisting && S.overrides.find((x) => x.id === S.ovrExisting);
+    const by = item?.setBy ? byLine('Set', item.setBy, item.setAt || item.updatedAt || item.createdAt) : '';
+    $('#ovr-by').textContent = by;
+    $('#ovr-by').hidden = !by;
   }
   function updateSplitUI() {
     $('#split-until-wrap').style.visibility = $('#ovr-form').elements.splitRepeat.value === 'none' ? 'hidden' : 'visible';
@@ -2660,6 +2862,8 @@
       const p = findIn(d.pto, id, 'request');
       p.status = status;
       p.decidedAt = status === 'pending' ? null : new Date().toISOString();
+      if (status === 'pending') delete p.decidedBy;
+      else p.decidedBy = actorName();
     }, msg);
     const p = S.pto.find((x) => x.id === id);
     if (ok && status === 'approved' && p) warnGaps(p.start, p.end, regionOf(emp(p.employeeId) || {}));
@@ -2880,6 +3084,7 @@
           return toast(e.message, true);
         }
         const empId = S.ovrEmp, id = S.absEditing;
+        Object.assign(clean, stamp());
         const ok = await mutate((d) => {
           findIn(d.employees, empId, 'employee');
           if (id) {
@@ -2905,6 +3110,7 @@
         const empId = S.ovrEmp, id = S.splitEditing, day = S.ovrDate;
         const sp = id && S.splits.find((x) => x.id === id);
         const oneDay = !!sp && sp.repeat !== 'none' && S.splitScope === 'one';
+        Object.assign(clean, stamp());
         const ok = await mutate((d) => {
           d.splits = d.splits || [];
           findIn(d.employees, empId, 'employee');
@@ -2931,6 +3137,7 @@
         return toast(e.message, true);
       }
       const empId = S.ovrEmp;
+      Object.assign(clean, stamp());
       const ok = await mutate((d) => {
         findIn(d.employees, empId, 'employee');
         // Older adjustments that fall entirely inside the new range are replaced by it.
@@ -3135,6 +3342,9 @@
       S.peId = id;
       const label = p.status[0].toUpperCase() + p.status.slice(1);
       $('#pe-who').innerHTML = `${avatar(e)}<span>${esc(e.name)}</span><span class="tag ${esc(p.status)}">${esc(label)}</span>`;
+      const by = [p.decidedBy && byLine(p.status === 'denied' ? 'Denied' : 'Approved', p.decidedBy, p.decidedAt), p.updatedBy && byLine('Last changed', p.updatedBy, p.updatedAt)].filter(Boolean);
+      $('#pe-by').textContent = by.join(' · ');
+      $('#pe-by').hidden = !by.length;
       pe.start.value = p.start;
       pe.end.value = p.end;
       pe.end.min = p.start;
@@ -3174,8 +3384,11 @@
         delete p.startTime; delete p.endTime; delete p.leaveAt;
         Object.assign(p, clean);
         // A non-admin changing decided time off sends it back for approval.
-        if (!S.admin && p.status !== 'pending') { p.status = 'pending'; p.decidedAt = null; reopened = true; }
+        if (!S.admin && p.status !== 'pending') { p.status = 'pending'; p.decidedAt = null; delete p.decidedBy; reopened = true; }
         p.updatedAt = new Date().toISOString();
+        // Changes by someone not signed in have no name to record.
+        if (S.admin) p.updatedBy = actorName();
+        else delete p.updatedBy;
       }, 'Time off updated');
       if (ok) {
         $('#pe-dialog').close();
@@ -3318,20 +3531,24 @@
     });
 
     // Notes tab: create / edit / delete, expand / collapse
+    bindRichEditor();
     resetNoteForm();
     $('#note-form').onsubmit = async (ev) => {
       ev.preventDefault();
       if (!S.admin) return;
       const f = ev.target;
-      const date = f.noteDate.value, title = f.noteTitle.value.trim().slice(0, 80), body = f.noteBody.value.trim().slice(0, 10000);
+      const date = f.noteDate.value, title = f.noteTitle.value.trim().slice(0, 80);
+      const html = sanitizeRich($('#note-editor').innerHTML);
+      const body = richToText(html); // plain-text copy, readable in data.json
       if (!DATE_RE.test(date)) return toast('Pick the meeting date', true);
       if (!body) return toast('Add the meeting notes', true);
+      if (html.length > 100000) return toast('These notes are too long to save in one meeting', true);
       const id = S.noteEditing;
       const now = new Date().toISOString();
       const ok = await mutate((d) => {
         d.notes = d.notes || [];
-        if (id) Object.assign(findIn(d.notes, id, 'note'), { date, title, body, updatedAt: now });
-        else d.notes.push({ id: uid(), kind: 'meeting', date, title, body, author: noteAuthor(), createdAt: now, updatedAt: now });
+        if (id) Object.assign(findIn(d.notes, id, 'note'), { date, title, body, html, updatedAt: now });
+        else d.notes.push({ id: uid(), kind: 'meeting', date, title, body, html, author: noteAuthor(), createdAt: now, updatedAt: now });
       }, id ? 'Notes updated' : 'Notes saved');
       if (ok) {
         const newest = !id && [...S.data.notes].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0];
@@ -3353,6 +3570,10 @@
       if (e) return editNote(e.dataset.noteEdit);
       const x = ev.target.closest('[data-note-del]');
       if (x) deleteNote(x.dataset.noteDel);
+    });
+    $('#notes-search').addEventListener('input', (ev) => { S.noteQuery = ev.target.value; renderNotes(); });
+    $('#notes-search').addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') { ev.target.value = ''; S.noteQuery = ''; renderNotes(); }
     });
     $('#notes-expand').onclick = () => { S.notesOpen = new Set(S.data.notes.map((n) => n.id)); renderNotes(); };
     $('#notes-collapse').onclick = () => { S.notesOpen = new Set(); renderNotes(); };
@@ -3541,6 +3762,16 @@
       if (url.length > 500) return toast('That link is too long', true);
       const ok = await mutate((d) => { d.settings.pagingUrl = url; }, url ? 'Paging link saved' : 'Paging link cleared');
       if (ok) S.pagingDirty = false;
+    };
+
+    // Admin name, shown on meeting notes the admin adds.
+    $('#admin-name-form').adminName.addEventListener('input', () => (S.adminNameDirty = true));
+    $('#admin-name-form').onsubmit = async (ev) => {
+      ev.preventDefault();
+      if (!isAdmin()) return;
+      const name = ev.target.adminName.value.trim().replace(/\s+/g, ' ').slice(0, 60);
+      const ok = await mutate((d) => { d.settings.adminName = name; }, name ? 'Admin name saved' : 'Admin name cleared');
+      if (ok) S.adminNameDirty = false;
     };
 
     // regions: add / remove
