@@ -1601,8 +1601,8 @@
         mtgs.map(({ m }) => `\nMeeting: ${m.title}, ${fmtTime(m.startTime)} – ${fmtTime(m.endTime)}`).join('') +
         `\nClick to ${S.admin ? 'add a meeting block or adjust hours' : 'add a meeting block'}`;
       return `<div class="tl-row">
-        <div class="tl-who">${avatar(w.e, 'sm')}<div class="tl-names"><div class="tl-name-row"><span class="tl-name" title="${esc(w.e.name)}">${esc(w.e.name)}</span><span class="hrs-badge${o ? ' adj' : ''}" style="--c:${w.e.color}" title="${esc(o ? (w.shift.extra ? 'Extra shift' : 'Adjusted hours') : 'Hours today')}">${shownLabel}${o ? (w.shift.extra ? ' <em>extra</em>' : '*') : ''}</span></div><div class="tl-sub">${esc(o?.note || w.e.role || '')}</div></div></div>
-        <div class="tl-track"><div class="${cls}" data-emp="${w.e.id}" style="--c:${w.e.color};left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(tip)}">${splitBlocks}${brkBlocks}${blocks}${ptoBlocks}${lateBlocks}</div></div>
+        <div class="tl-who">${avatar(w.e, 'sm')}<div class="tl-names"><div class="tl-name" title="${esc(w.e.name)}">${esc(w.e.name)}</div><div class="tl-sub">${esc(o?.note || w.e.role || '')}</div></div></div>
+        <div class="tl-track"><div class="${cls}" data-emp="${w.e.id}" style="--c:${w.e.color};left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(tip)}"><span class="tl-label">${shownLabel}${o ? (w.shift.extra ? ' <em>extra shift</em>' : '<b class="adj-star">*</b>') : ''}</span>${splitBlocks}${brkBlocks}${blocks}${ptoBlocks}${lateBlocks}</div></div>
       </div>`;
     };
     // Someone from another region shown in the region they're covering: a bar
@@ -1691,6 +1691,27 @@
       <div class="tl-row tl-cov"><div class="tl-who"><span class="muted small">Available by hour</span></div><div class="tl-track cov">${covCells}</div></div>
       ${now}
     </div>`;
+    placeBarLabels();
+  }
+
+  // The hours always sit at the start of the bar. When a meeting, break,
+  // lunch, Late or PTO block is underneath, they get a small solid badge
+  // so they stay readable on top of it.
+  function placeBarLabels() {
+    for (const bar of $$('#timeline .tl-bar')) {
+      const lab = $('.tl-label', bar);
+      if (!lab || !bar.clientWidth) continue; // Home isn't on screen; redone when it is
+      const blocks = [...bar.children].filter((c) => c !== lab && /\b(mtg|brk|ptob|split)\b/.test(c.className));
+      blocks.forEach((c) => (c.style.paddingLeft = ''));
+      lab.classList.remove('over');
+      const covered = blocks.filter((c) => c.offsetLeft < lab.offsetLeft + lab.offsetWidth + 4);
+      lab.classList.toggle('over', covered.length > 0);
+      // A meeting or Late block under the badge: start its name after the badge.
+      const end = lab.offsetLeft + lab.offsetWidth + 4;
+      for (const c of covered) {
+        if (c.classList.contains('mtg') && end > c.offsetLeft) c.style.paddingLeft = `${end - c.offsetLeft}px`;
+      }
+    }
   }
 
   function renderStartGroups(working) {
@@ -2924,6 +2945,8 @@
       localStorage.setItem('sdh-region', S.region);
       renderHome();
     };
+    // Re-place the hours when the window resizes or Home comes back on screen.
+    if ('ResizeObserver' in window) new ResizeObserver(() => placeBarLabels()).observe($('#timeline'));
     $('#timeline').addEventListener('click', (ev) => {
       const bar = ev.target.closest('.tl-bar[data-emp]');
       if (!bar) return;
