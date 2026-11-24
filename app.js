@@ -834,6 +834,39 @@
     }
     return { employeeId, start, end, fullDay, ...times, note: str(body.note, 'Note', 300, false) };
   }
+  // ---------- PTO limits ----------
+  // settings.ptoMax: { region: most people off on one day }. Missing or 0 = no limit.
+  function normPtoMax(m) {
+    const out = {};
+    if (m && typeof m === 'object') for (const [r, n] of Object.entries(m)) if (Number.isInteger(n) && n > 0 && n <= 99) out[r] = n;
+    return out;
+  }
+  // Days in the request where the person's region is already at its limit.
+  // Counts other people in the same region with approved or pending PTO that day;
+  // skips days the requester doesn't work and full-day holidays.
+  function ptoLimitHits(d, req) {
+    const e = d.employees.find((x) => x.id === req.employeeId);
+    const region = e && regionOf(e);
+    const max = region && d.settings.ptoMax?.[region];
+    if (!max) return [];
+    const regionIds = new Set(d.employees.filter((x) => x.id !== e.id && regionOf(x) === region).map((x) => x.id));
+    const hits = [];
+    for (let day = req.start; day <= req.end; day = addDays(day, 1)) {
+      if (!e.schedule?.[parseYmd(day).getDay()]?.on) continue;
+      if (holidaysOn(day).some((h) => h.kind === 'full')) continue;
+      const off = new Set(d.pto.filter((p) => p.status !== 'denied' && regionIds.has(p.employeeId) && p.start <= day && p.end >= day).map((p) => p.employeeId));
+      if (off.size >= max) hits.push(day);
+    }
+    return hits;
+  }
+  // Auto-denied for the limit, and no manager has overridden it or chosen "Keep denied" yet.
+  const needsReview = (p) => p.autoDenied && p.status === 'denied' && !p.reviewed;
+  // "Nov 25, Nov 27 and Dec 1"
+  function listDays(days) {
+    const f = days.map((x) => fmtDate(x, { month: 'short', day: 'numeric' }));
+    return f.length < 2 ? f.join('') : `${f.slice(0, -1).join(', ')} and ${f[f.length - 1]}`;
+  }
+
   // Partial-day PTO has startTime/endTime; older requests and full days don't.
   function isPartial(p) {
     return p.fullDay === false && TIME_RE.test(p.startTime || '') && TIME_RE.test(p.endTime || '');
@@ -865,6 +898,7 @@
         pagingUrl: typeof d.settings?.pagingUrl === 'string' ? d.settings.pagingUrl : '',
         showNotes: !!d.settings?.showNotes,
         adminName: typeof d.settings?.adminName === 'string' ? d.settings.adminName.trim().slice(0, 60) : '',
+        ptoMax: normPtoMax(d.settings?.ptoMax),
       },
       notes: Array.isArray(d.notes) ? d.notes.filter((n) => n && n.id && DATE_RE.test(n.date || '') && typeof n.body === 'string') : [],
       employees: Array.isArray(d.employees) ? d.employees : [],
@@ -1104,6 +1138,14 @@
     setTimeout(() => el.remove(), err === 'warn' ? 8000 : 3600);
   }
 
+  // A message with just an OK button.
+  function noticeBox(title, msg) {
+    const dlg = $('#notice-dialog');
+    $('#notice-title').textContent = title;
+    $('#notice-msg').textContent = msg;
+    dlg.showModal();
+    return new Promise((resolve) => dlg.addEventListener('close', resolve, { once: true }));
+  }
   function confirmBox(title, msg, okLabel = 'Confirm') {
     const dlg = $('#confirm-dialog');
     $('#confirm-title').textContent = title;
@@ -1269,7 +1311,7 @@
   }
 
   function renderTopbar() {
-    const pending = S.pto.filter((p) => p.status === 'pending').length;
+    const pending = S.pto.filter((p) => p.status === 'pending' || needsReview(p)).length;
     const badge = $('#pending-badge');
     badge.hidden = !S.admin || !pending;
     badge.textContent = pending;
@@ -2300,12 +2342,18 @@
     if (!e) return '';
     const days = daysBetween(p.start, p.end);
     let btns = '';
+    const limitHit = p.autoDenied && p.status === 'denied';
     if (S.admin) {
       btns =
         p.status === 'pending'
           ? `<button class="btn ok xs" data-approve="${p.id}">Approve</button><button class="btn ghost xs" data-deny="${p.id}">Deny</button>`
-          : `<button class="btn ghost xs" data-reset="${p.id}">Reopen</button><button class="btn ghost xs" data-del-pto="${p.id}">Delete</button>`;
+          : limitHit && !p.reviewed
+          ? `<button class="btn ok xs" data-approve="${p.id}" title="Approve even though the region is at its PTO limit">Override &amp; approve</button><button class="btn ghost xs" data-keep-denied="${p.id}">Keep denied</button>`
+          : `${limitHit ? `<button class="btn ok xs" data-approve="${p.id}" title="Approve even though the region is at its PTO limit">Override</button>` : ''}<button class="btn ghost xs" data-reset="${p.id}">Reopen</button><button class="btn ghost xs" data-del-pto="${p.id}">Delete</button>`;
     }
+    const limitNote = limitHit
+      ? `<div class="req-limit">Over the ${esc(regionLabel(regionOf(e)))} PTO limit on ${esc(listDays(p.limitDays || []))}${p.reviewed ? ' · kept denied' : ''}</div>`
+      : p.overridden ? `<div class="req-limit ok">Approved over the PTO limit</div>` : '';
     return `<div class="req">
       ${avatar(e)}
       <div class="req-main">
@@ -2313,8 +2361,9 @@
         <div class="req-meta">${esc(fmtRange(p.start, p.end))} · ${
           isPartial(p) ? `${esc(ptoHours(p))}${days > 1 ? ` on ${days} days` : ''}` : `${days} day${days === 1 ? '' : 's'}`
         }</div>
+        ${limitNote}
         ${p.note ? `<div class="req-note">“${esc(p.note)}”</div>` : ''}
-        ${p.decidedBy ? `<div class="req-by">${esc(byLine(p.status === 'denied' ? 'Denied' : 'Approved', p.decidedBy, p.decidedAt))}</div>` : ''}
+        ${p.decidedBy && !(limitHit && p.decidedBy.startsWith('Automatic')) ? `<div class="req-by">${esc(byLine(p.status === 'denied' ? 'Denied' : 'Approved', p.decidedBy, p.decidedAt))}</div>` : ''}
       </div>
       <div class="req-actions">${btns}</div>
     </div>`;
@@ -2350,8 +2399,10 @@
       [upcoming, 'Upcoming approved PTO'],
     ].map(([v, l]) => `<div class="card stat"><div class="stat-v">${v}</div><div class="stat-l">${l}</div></div>`).join('');
 
-    $('#approval-list').innerHTML = pending.length
-      ? [...pending].sort((a, b) => a.start.localeCompare(b.start)).map(requestRow).join('')
+    // Pending requests, plus auto-denied ones (over the PTO limit) a manager hasn't looked at yet.
+    const review = [...pending, ...S.pto.filter(needsReview)];
+    $('#approval-list').innerHTML = review.length
+      ? review.sort((a, b) => a.start.localeCompare(b.start)).map(requestRow).join('')
       : `<div class="empty-big">You're all caught up ✨</div>`;
 
     if (!S.employees.length) {
@@ -2382,6 +2433,15 @@
 
     // Coverage hours editor (left alone while someone is editing it).
     if (!S.covDirty) renderCoverageEditor();
+    if (!S.ptoMaxDirty) {
+      const max = S.data.settings.ptoMax || {};
+      $('#ptomax-list').innerHTML = REGIONS.filter((r) => !isHidden(r))
+        .map(
+          (r) => `<label class="ptomax-row"><span class="rc-name"><i style="--c:${REGION_COLORS[r]}"></i>${esc(r)}</span>
+            <input type="number" min="1" max="99" step="1" inputmode="numeric" data-ptomax="${esc(r)}" value="${max[r] || ''}" placeholder="No limit" aria-label="Max people on PTO per day in ${esc(r)}" /></label>`
+        )
+        .join('');
+    }
     renderHolidays();
     // One entry per day that has a gap, listing each affected region.
     const alerts = [];
@@ -3329,10 +3389,10 @@
   // Who approved/denied PTO, adjusted hours, or marked someone late/absent. Kept in
   // data.json (newest HISTORY_MAX entries) and shown under Admin → History.
   const HISTORY_MAX = 3000;
-  function logEvent(d, kind, employeeId, action, detail) {
+  function logEvent(d, kind, employeeId, action, detail, by) {
     d.history = Array.isArray(d.history) ? d.history : [];
     const e = d.employees.find((x) => x.id === employeeId);
-    d.history.push({ id: uid(), at: new Date().toISOString(), by: actorName(), kind, employeeId, name: e?.name || '', action, detail: detail || '' });
+    d.history.push({ id: uid(), at: new Date().toISOString(), by: by || actorName(), kind, employeeId, name: e?.name || '', action, detail: detail || '' });
     if (d.history.length > HISTORY_MAX) d.history.splice(0, d.history.length - HISTORY_MAX);
   }
   const ptoDetail = (p) => `${fmtRangeShort(p.start, p.end)}${isPartial(p) ? ` · ${ptoHours(p)}` : ''}`;
@@ -3356,7 +3416,13 @@
       p.decidedAt = status === 'pending' ? null : new Date().toISOString();
       if (status === 'pending') delete p.decidedBy;
       else p.decidedBy = actorName();
-      const action = { approved: 'Approved PTO', denied: 'Denied PTO', pending: 'Moved PTO back to pending' }[status];
+      // A manager acting on an auto-denied (over the limit) request.
+      const override = p.autoDenied && status === 'approved';
+      if (p.autoDenied) {
+        p.reviewed = true;
+        if (override) p.overridden = true;
+      }
+      const action = override ? 'Approved PTO (over the limit)' : { approved: 'Approved PTO', denied: 'Denied PTO', pending: 'Moved PTO back to pending' }[status];
       logEvent(d, status, p.employeeId, action, ptoDetail(p));
     }, msg);
     const p = S.pto.find((x) => x.id === id);
@@ -3761,9 +3827,24 @@
     pf.onsubmit = async (ev) => {
       ev.preventDefault();
       const body = { ...Object.fromEntries(new FormData(pf)), fullDay: pf.fullDay.checked };
+      let hits = [];
       const ok = await mutate((d) => {
-        d.pto.push({ id: uid(), ...cleanPto(body, d), status: 'pending', createdAt: new Date().toISOString(), decidedAt: null });
-      }, 'Request submitted');
+        const req = cleanPto(body, d);
+        hits = ptoLimitHits(d, req);
+        const now = new Date().toISOString();
+        if (hits.length) {
+          // Over the region's limit: saved as denied so a manager can see it and override.
+          d.pto.push({ id: uid(), ...req, status: 'denied', autoDenied: true, limitDays: hits, decidedBy: 'Automatic (PTO limit)', createdAt: now, decidedAt: now });
+          logEvent(d, 'denied', req.employeeId, 'PTO auto-denied (limit reached)', `${ptoDetail(req)} · full on ${listDays(hits)}`, 'Automatic');
+        } else d.pto.push({ id: uid(), ...req, status: 'pending', createdAt: now, decidedAt: null });
+      }, null);
+      if (ok && hits.length) {
+        const e = emp(body.employeeId);
+        await noticeBox(
+          'PTO limit reached',
+          `${regionLabel(regionOf(e || {}))} already has the maximum number of people on PTO on ${listDays(hits)}. Your request was submitted but marked denied. Please contact your manager; they can override it.`
+        );
+      } else if (ok) toast('Request submitted');
       if (ok) {
         // Clear the request but keep the person, and go back to today's date.
         const who = body.employeeId;
@@ -3942,6 +4023,14 @@
       if (t.dataset.approve) setStatus(t.dataset.approve, 'approved', 'Request approved');
       if (t.dataset.deny) setStatus(t.dataset.deny, 'denied', 'Request denied');
       if (t.dataset.reset) setStatus(t.dataset.reset, 'pending', 'Moved back to pending');
+      if (t.dataset.keepDenied)
+        mutate((d) => {
+          const p = findIn(d.pto, t.dataset.keepDenied, 'request');
+          p.reviewed = true;
+          p.decidedBy = actorName();
+          p.decidedAt = new Date().toISOString();
+          logEvent(d, 'denied', p.employeeId, 'Kept PTO denied (over the limit)', ptoDetail(p));
+        }, 'Kept denied');
       if (t.dataset.delPto && (await confirmBox('Delete request?', 'This removes the request from the shared file.', 'Delete')))
         mutate((d) => { findIn(d.pto, t.dataset.delPto, 'request'); d.pto = d.pto.filter((p) => p.id !== t.dataset.delPto); }, 'Request deleted');
       if (t.dataset.addShift) openOverrideDialog(t.dataset.addShift, S.homeDate);
@@ -4075,7 +4164,28 @@
     });
     $('#rep-csv').addEventListener('click', downloadReportCsv);
     $('#rep-print').addEventListener('click', printReport);
-    $('#gaps-open').onclick = () => $('#gaps-dialog').showModal();
+    $('#ptomax-form').addEventListener('input', () => (S.ptoMaxDirty = true));
+    $('#ptomax-form').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const next = {};
+      for (const inp of $$('#ptomax-list [data-ptomax]')) {
+        const v = inp.value.trim();
+        if (!v) continue;
+        const n = Number(v);
+        if (!Number.isInteger(n) || n < 1 || n > 99) return toast(`${inp.dataset.ptomax}: enter a whole number from 1 to 99, or leave it blank`, true);
+        next[inp.dataset.ptomax] = n;
+      }
+      const ok = await mutate((d) => {
+        // Hidden regions aren't listed, so keep whatever limit they already had.
+        const kept = Object.fromEntries(Object.entries(d.settings.ptoMax || {}).filter(([r]) => isHidden(r)));
+        d.settings.ptoMax = { ...kept, ...next };
+      }, 'PTO limits saved');
+      if (ok) {
+        S.ptoMaxDirty = false;
+        renderAdmin();
+      }
+    };
+    $('#gaps-open').onclick =() => $('#gaps-dialog').showModal();
     $$('#gaps-dialog [data-close]').forEach((b) => (b.onclick = () => $('#gaps-dialog').close()));
     $('#adj-more').onclick =() => { S.adjAll = !S.adjAll; renderAdmin(); };
     $('#hist-list').addEventListener('click', (ev) => {

@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="app-icon-192.png?v=6" />
   <!-- ?v= on styles.css and app.js: changed with each update, so a new page
        never runs with an old cached app.js or styles.css (or the other way round). -->
-  <link rel="stylesheet" href="styles.css?v=20261124-32" />
+  <link rel="stylesheet" href="styles.css?v=20261124-34" />
   <!-- Dark mode is set before the page draws, so it never flashes light first. -->
   <script>try { if (localStorage.getItem('sdh-theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}</script>
 </head>
@@ -361,6 +361,14 @@
               <div class="cov-actions">
                 <span class="muted small">Same hours every selected day.</span>
                 <button class="btn primary sm" type="submit">Save coverage hours</button>
+              </div>
+            </form>
+            <form id="ptomax-form" class="ptomax" autocomplete="off">
+              <h3 class="sec-title">Max people on PTO per day</h3>
+              <div class="ptomax-list" id="ptomax-list"></div>
+              <div class="cov-actions">
+                <span class="muted small">Leave blank for no limit. Requests over the limit are saved as denied.</span>
+                <button class="btn primary sm" type="submit">Save limits</button>
               </div>
             </form>
           </div>
@@ -883,6 +891,16 @@
     </form>
   </dialog>
 
+  <dialog id="notice-dialog" class="small-dialog">
+    <form method="dialog">
+      <h2 id="notice-title"></h2>
+      <p class="muted" id="notice-msg"></p>
+      <div class="dialog-foot">
+        <button class="btn primary" value="ok">OK</button>
+      </div>
+    </form>
+  </dialog>
+
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
   <!-- Safety net: if the page is still on "Loading…" after a while (OneDrive
@@ -918,6 +936,6 @@
       setTimeout(show, 12000);
     })();
   </script>
-  <script src="app.js?v=20261124-32"></script>
+  <script src="app.js?v=20261124-34"></script>
 </body>
 </html>
