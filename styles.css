@@ -447,6 +447,42 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .wd.on { color: color-mix(in srgb, var(--c) 75%, black); background: color-mix(in srgb, var(--c) 18%, white); border-color: color-mix(in srgb, var(--c) 35%, white); }
 .sched-hours { font-size: 12.5px; font-weight: 550; line-height: 1.5; white-space: nowrap; }
 .sched-days { display: inline-block; min-width: 62px; margin-right: 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+/* Home → Week view */
+.cal-nav { align-items: center; }
+.view-seg { margin-right: 6px; }
+.lg-wk-pto { background: repeating-linear-gradient(135deg, #fff1d6 0 3px, #f6d394 3px 6px); }
+.wk-scroll { overflow-x: auto; }
+.wk-grid { display: grid; grid-template-columns: minmax(150px, 200px) repeat(var(--days), minmax(118px, 1fr)); min-width: calc(150px + var(--days) * 118px); }
+.wk-corner { border-bottom: 1px solid var(--border); }
+.wk-day { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 8px 8px; border: 0; border-bottom: 1px solid var(--border); background: none; font: inherit; font-size: 13px; color: var(--text); text-align: left; cursor: pointer; border-radius: 8px 8px 0 0; }
+.wk-day:hover { background: var(--surface-2); }
+.wk-day span { font-size: 11px; color: var(--muted); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.wk-day.today { background: var(--accent-soft); color: var(--accent); }
+.wk-day.hol span { color: #b91c1c; }
+.wk-group { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; padding: 12px 8px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.wk-group i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.wk-name { display: flex; align-items: center; padding: 3px 8px; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.wk-cell { padding: 3px; min-width: 0; }
+.wk-cell.today, .wk-cov.today { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
+.wk-c { display: flex; flex-direction: column; justify-content: center; gap: 1px; width: 100%; min-height: 34px; padding: 4px 7px; border-radius: 7px; font: inherit; font-size: 12px; text-align: left; cursor: pointer; border: 1.5px solid transparent; background: none; color: var(--text); min-width: 0; }
+.wk-c > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.wk-c.shift { border-color: var(--c); background: color-mix(in srgb, var(--c) 10%, white); color: color-mix(in srgb, var(--c) 70%, black); }
+.wk-c.shift:hover { background: color-mix(in srgb, var(--c) 18%, white); }
+.wk-h { font-weight: 650; }
+.wk-c .adj-star { font-weight: 800; color: var(--c); margin-left: 1px; }
+.wk-sub { font-size: 11px; font-weight: 600; color: var(--muted); }
+.wk-sub.abs { color: #b91c1c; }
+.wk-sub.pto { color: #92400e; }
+.wk-sub.pend { color: #b45309; }
+.wk-c.pto { background: repeating-linear-gradient(135deg, #fff1d6 0 6px, #ffe8b8 6px 12px); border: 1.5px dashed #e3a63b; color: #92400e; font-weight: 650; }
+.wk-c.abs { background: color-mix(in srgb, var(--muted) 12%, white); border-color: var(--border); border-left: 3px solid var(--muted); border-radius: 0 7px 7px 0; font-weight: 650; }
+.wk-c.off { color: #a3a7b8; border: 1px dashed transparent; }
+.wk-c.off:hover { border-color: var(--border); background: var(--surface-2); }
+.wk-cov-label { margin-top: 8px; border-top: 1px solid var(--border); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.wk-cov { margin-top: 8px; border-top: 1px solid var(--border); padding: 8px; font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
+.wk-ok { color: #047857; font-weight: 600; }
+.wk-gap { color: #b91c1c; font-weight: 650; background: var(--bad-soft); padding: 1px 7px; border-radius: 99px; align-self: flex-start; white-space: nowrap; }
+
 /* Admin → Call-in report */
 .rep-card { grid-column: 1 / -1; min-width: 0; }
 .rep-tools { display: flex; gap: 6px; }

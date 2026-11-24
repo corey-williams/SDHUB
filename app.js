@@ -60,6 +60,7 @@
     // Home
     homeDate: ymd(new Date()),
     region: localStorage.getItem('sdh-region') || 'all',
+    homeView: localStorage.getItem('sdh-home-view') === 'week' ? 'week' : 'day',
     // PTO tab
     view: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
     selected: null,
@@ -1448,13 +1449,25 @@
     };
     const regs = ['all', ...regionTabs()];
     if (!regs.includes(S.region)) S.region = 'all';
+    const week = S.homeView === 'week';
+    $$('#view-seg [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === S.homeView));
+    $('#day-prev').setAttribute('aria-label', week ? 'Previous week' : 'Previous day');
+    $('#day-next').setAttribute('aria-label', week ? 'Next week' : 'Next day');
+    $('#day-today').textContent = week ? 'This week' : 'Today';
+    $('#home-grid').hidden = week;
+    $('#week-card').hidden = !week;
     $('#region-tabs').innerHTML = regs
       .map((r) => {
-        const n = status.working.filter((w) => inRegion(w.e, r)).length;
+        // Day: who's on shift that day. Week: how many people are in the region.
+        const n = week ? S.employees.filter((e) => visibleEmp(e) && inRegion(e, r)).length : status.working.filter((w) => inRegion(w.e, r)).length;
         const dot = r === 'all' ? '' : `<i style="--c:${REGION_COLORS[r]}"></i>`;
         return `<button type="button" data-region="${esc(r)}" class="${S.region === r ? 'on' : ''}">${dot}${r === 'all' ? 'All regions' : esc(regionLabel(r))}<span class="cnt">${n}</span></button>`;
       })
       .join('');
+    if (week) {
+      $('#holiday-banner').hidden = $('#coverage-banner').hidden = true;
+      return renderWeek();
+    }
 
     const working = status.working.filter((w) => inRegion(w.e, S.region));
     const onPto = status.pto.filter((p) => inRegion(p.e, S.region));
@@ -1501,6 +1514,95 @@
     renderTimeline(working, isToday, win, gapMap);
     renderStartGroups(working);
     renderTimeOff(onPto, pendingPto, off.filter((o) => !o.pending), working, absent);
+  }
+
+  // ---------- week view ----------
+  // Jump from the week view (or anywhere) to one day in Day view.
+  function showDay(ds) {
+    S.homeDate = ds;
+    S.homeView = 'day';
+    localStorage.setItem('sdh-home-view', 'day');
+    renderHome();
+    window.scrollTo({ top: 0 });
+  }
+  function renderWeek() {
+    const ds = S.homeDate;
+    const today = ymd(new Date());
+    const mon = addDays(ds, -((parseYmd(ds).getDay() + 6) % 7));
+    const all = Array.from({ length: 7 }, (_, i) => addDays(mon, i));
+    const people = S.employees.filter((e) => visibleEmp(e) && inRegion(e, S.region));
+    const stat = Object.fromEntries(all.map((d) => [d, dayStatus(d)]));
+    // Weekends only show when someone shown is working them.
+    const days = all.filter((d, i) => i < 5 || stat[d].working.some((w) => people.includes(w.e)));
+    $('#home-dow').textContent = days.includes(today) ? 'This week' : 'Week of';
+    $('#home-date').textContent = `${fmtDate(mon, { month: 'long', day: 'numeric' })} – ${fmtDate(days[days.length - 1], mon.slice(5, 7) === days[days.length - 1].slice(5, 7) ? { day: 'numeric' } : { month: 'long', day: 'numeric' })}`;
+
+    const grid = $('#week-grid');
+    if (!people.length) {
+      grid.innerHTML = `<div class="empty-big">${S.employees.length ? 'No one in this region.' : 'No team members yet. Add people from the <a href="#admin">Admin</a> tab.'}</div>`;
+      return;
+    }
+    const cell = (e, d) => {
+      const st = stat[d];
+      const attrs = (kind, extra = '') => `data-wk-emp="${e.id}" data-wk-date="${d}" data-wk-kind="${kind}"${extra}`;
+      const abs = st.absent.find((x) => x.e === e);
+      const w = st.working.find((x) => x.e === e);
+      const full = st.pto.find((x) => x.e === e && !x.partial);
+      const subs = [];
+      if (abs && !w) return `<button type="button" class="wk-c abs" ${attrs('abs', ` data-wk-abs="${abs.absence.id}"`)} title="${esc(abs.absence.note || abs.absence.reason)}">${esc(abs.absence.reason)}</button>`;
+      if (full) return `<button type="button" class="wk-c pto" ${attrs('pto', ` data-wk-pto="${full.req.id}"`)} title="${esc(full.req.note || 'Approved PTO')}">PTO</button>`;
+      if (w) {
+        const s = w.shift;
+        if (abs) subs.push(`<span class="wk-sub abs">${esc(absenceLabel(abs.absence))}</span>`);
+        for (const p of st.pto.filter((x) => x.e === e && x.partial)) subs.push(`<span class="wk-sub pto">PTO ${esc(ptoHours(p.req))}</span>`);
+        if (w.pending) subs.push(`<span class="wk-sub pend">PTO pending</span>`);
+        if (s.extra) subs.push(`<span class="wk-sub">Extra shift</span>`);
+        const star = s.override && !s.extra ? '<b class="adj-star">*</b>' : '';
+        const tip = s.override?.note ? ` title="${esc(s.override.note)}"` : '';
+        return `<button type="button" class="wk-c shift" style="--c:${e.color}" ${attrs('shift')}${tip}><span class="wk-h">${fmtTime(s.start)} – ${fmtTime(s.end)}${star}</span>${subs.join('')}</button>`;
+      }
+      const o = st.off.find((x) => x.e === e);
+      const hol = holidayOn(d);
+      return `<button type="button" class="wk-c off" ${attrs('off')}>${hol && hol.kind === 'full' ? 'Holiday' : 'Off'}${o?.pending ? '<span class="wk-sub pend">PTO pending</span>' : ''}</button>`;
+    };
+    const head = days
+      .map((d) => {
+        const hol = holidayOn(d);
+        return `<button type="button" class="wk-day${d === today ? ' today' : ''}${hol ? ' hol' : ''}" data-wk-day="${d}" title="Open this day">
+          <b>${fmtDate(d, { weekday: 'short' })} ${fmtDate(d, { day: 'numeric' })}</b>${hol ? `<span>${esc(hol.name)}</span>` : ''}</button>`;
+      })
+      .join('');
+    const groups = regionGroups()
+      .map((r) => {
+        const list = people.filter((e) => regionOf(e) === r).sort((a, b) => a.name.localeCompare(b.name));
+        if (!list.length) return '';
+        return (
+          `<div class="wk-group" style="--c:${REGION_COLORS[r]}"><i></i>${esc(regionLabel(r))}</div>` +
+          list.map((e) => `<div class="wk-name" title="${esc(e.name)}">${esc(e.name)}</div>${days.map((d) => `<div class="wk-cell${d === today ? ' today' : ''}">${cell(e, d)}</div>`).join('')}`).join('')
+        );
+      })
+      .join('');
+    const cov = days
+      .map((d) => {
+        const hol = holidayOn(d);
+        const checks = regionGaps(d).filter((x) => S.region === 'all' || x.region === S.region);
+        const on = stat[d].working.filter((w) => people.includes(w.e)).length;
+        let txt;
+        if (hol?.kind === 'full' && !on) txt = `<span class="muted">Closed</span>`;
+        else {
+          const bad = checks.filter((x) => x.gaps.length);
+          txt = bad.length
+            ? bad.map((x) => `<span class="wk-gap" title="${esc(x.region)}: no coverage ${esc(x.gaps.map(fmtGap).join(', '))}">Gap · ${esc(x.region)}</span>`).join('')
+            : `<span class="wk-ok">${on} on${checks.length ? ' · covered' : ''}</span>`;
+        }
+        return `<div class="wk-cov${d === today ? ' today' : ''}">${txt}</div>`;
+      })
+      .join('');
+    grid.innerHTML = `<div class="wk-grid" style="--days:${days.length}">
+      <div class="wk-corner"></div>${head}
+      ${groups}
+      <div class="wk-name wk-cov-label">Coverage</div>${cov}
+    </div>`;
   }
 
   function renderTimeline(working, isToday, win = null, gapMap = {}) {
@@ -2761,13 +2863,18 @@
   }
 
   // ---------- bar menu + meeting blocks ----------
-  function openBarMenu(x, y, empId, at) {
+  // From the week view: date is that cell's day, working says whether they have a shift.
+  function openBarMenu(x, y, empId, at, { date = null, working = true } = {}) {
     const e = emp(empId);
     const menu = $('#bar-menu');
-    S.menu = { emp: empId, at };
-    $('#bar-menu-head').textContent = e.name;
-    $('[data-act="adjust"]', menu).hidden = !S.admin;
-    $('[data-act="split"]', menu).hidden = !S.admin || !splitsEnabled();
+    S.menu = { emp: empId, at, date };
+    $('#bar-menu-head').textContent = date ? `${e.name} · ${fmtDate(date, { weekday: 'short', month: 'short', day: 'numeric' })}` : e.name;
+    $('[data-act="meeting"]', menu).hidden = !working;
+    $('[data-act="adjust"]', menu).hidden = !S.admin || !working;
+    $('[data-act="split"]', menu).hidden = !S.admin || !working || !splitsEnabled();
+    $('[data-act="absent"]', menu).hidden = !S.admin || !date || !working;
+    $('[data-act="addshift"]', menu).hidden = !S.admin || working;
+    $('[data-act="viewday"]', menu).hidden = !date;
     menu.hidden = false;
     const w = menu.offsetWidth, h = menu.offsetHeight;
     menu.style.left = Math.min(x, window.innerWidth - w - 8) + 'px';
@@ -2872,7 +2979,8 @@
     const a = absenceFor(e, dateStr);
     S.absEditing = a ? a.id : null;
     const reasons = a && !ABSENCE_REASONS.includes(a.reason) ? [...ABSENCE_REASONS, a.reason] : ABSENCE_REASONS;
-    f.absReason.innerHTML = reasons.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join('');
+    // Only the dropdown text changes; the saved reason stays "Leaving early" so older entries still match.
+    f.absReason.innerHTML = reasons.map((r) => `<option value="${esc(r)}">${esc(r === LEAVING ? 'Leaving early (unscheduled)' : r)}</option>`).join('');
     f.absReason.value = a ? a.reason : ABSENCE_REASONS[0];
     f.absStart.value = a ? a.start : dateStr;
     f.absEnd.value = a ? a.end : dateStr;
@@ -3078,7 +3186,30 @@
     });
 
     // Home: day navigation + region
-    const goDay = (n) => { S.homeDate = n === 0 ? ymd(new Date()) : addDays(S.homeDate, n); renderHome(); };
+    // In Week view the arrows move a week at a time.
+    const goDay = (n) => { S.homeDate = n === 0 ? ymd(new Date()) : addDays(S.homeDate, S.homeView === 'week' ? n * 7 : n); renderHome(); };
+    $('#view-seg').onclick = (ev) => {
+      const b = ev.target.closest('[data-view]');
+      if (!b || b.dataset.view === S.homeView) return;
+      S.homeView = b.dataset.view;
+      localStorage.setItem('sdh-home-view', S.homeView);
+      renderHome();
+    };
+    // Week view: a day header goes to that day; a cell opens the same menu as a bar in Day view.
+    $('#week-grid').addEventListener('click', (ev) => {
+      const head = ev.target.closest('[data-wk-day]');
+      if (head) return showDay(head.dataset.wkDay);
+      const c = ev.target.closest('[data-wk-emp]');
+      if (!c) return;
+      ev.stopPropagation();
+      const { wkEmp: empId, wkDate: date, wkKind: kind } = c.dataset;
+      if (kind === 'pto') return openPtoEdit(c.dataset.wkPto);
+      if (kind === 'abs') return S.admin ? openAbsence(c.dataset.wkAbs) : showDay(date);
+      const working = kind === 'shift';
+      if (!S.admin && !working) return showDay(date);
+      const shift = working && effectiveShift(emp(empId), date);
+      openBarMenu(ev.clientX, ev.clientY, empId, working ? toMin(shift.start) : null, { date, working });
+    });
     $('#day-prev').onclick = () => goDay(-1);
     $('#day-next').onclick = () => goDay(1);
     $('#day-today').onclick = () => goDay(0);
@@ -3120,10 +3251,14 @@
       const b = ev.target.closest('[data-act]');
       if (!b) return;
       const { emp: empId, at } = S.menu;
+      const date = S.menu.date || S.homeDate;
       closeBarMenu();
-      if (b.dataset.act === 'meeting') openMeetingDialog(empId, S.homeDate, { at });
-      if (b.dataset.act === 'adjust') openOverrideDialog(empId, S.homeDate);
-      if (b.dataset.act === 'split') openOverrideDialog(empId, S.homeDate, { mode: 'split' });
+      const act = b.dataset.act;
+      if (act === 'meeting') openMeetingDialog(empId, date, { at });
+      if (act === 'adjust' || act === 'addshift') openOverrideDialog(empId, date);
+      if (act === 'split') openOverrideDialog(empId, date, { mode: 'split' });
+      if (act === 'absent') openOverrideDialog(empId, date, { mode: 'absent' });
+      if (act === 'viewday') showDay(date);
     });
     document.addEventListener('click', (ev) => {
       if (!ev.target.closest('#bar-menu')) closeBarMenu();
