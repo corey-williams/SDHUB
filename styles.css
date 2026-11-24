@@ -764,8 +764,17 @@ body.is-supervisor .admin-only { display: none !important; }
 .tl-gap span { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 700; color: var(--bad-text); white-space: nowrap; background: var(--surface); padding: 0 4px; border-radius: 4px; }
 .cov-cell.zero { background: var(--bad-soft); color: var(--bad); }
 .toast.warn { background: #b45309 !important; color: #fff; max-width: 420px; }
-.cov-card { min-width: 0; }
-.cov-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; align-items: start; }
+/* As tall as the Holidays card beside it; the gaps list scrolls to fit. */
+.cov-card { min-width: 0; align-self: stretch; display: flex; flex-direction: column; }
+/* Coverage gaps button: turns red with a count when any gap is found. */
+.gaps-btn { gap: 6px; }
+.gaps-btn.alert { background: var(--bad-soft); color: var(--bad-text); border-color: var(--bad-border); }
+.gaps-btn.alert svg { animation: gap-pulse 1.6s ease-in-out infinite; }
+.gaps-count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 700; display: inline-grid; place-items: center; }
+@keyframes gap-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .gaps-btn.alert svg { animation: none; } }
+#gaps-dialog { width: min(560px, calc(100vw - 32px)); }
+.gaps-list { max-height: 65vh; overflow-y: auto; margin-top: 8px; }
 .cov-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; }
 .rc-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .rc-row { display: grid; grid-template-columns: 110px auto 1fr; align-items: center; gap: 14px; padding: 10px 12px; border-top: 1px solid var(--border); }
@@ -1010,7 +1019,7 @@ dialog form, dialog .dialog-body { padding: 22px; display: flex; flex-direction:
   .appr-card #approval-list { contain: none; max-height: 420px; }
   .day-panel, .form-card { position: static; }
   .stats { grid-template-columns: repeat(2, 1fr); }
-  .settings-grid, .cov-grid { grid-template-columns: 1fr; }
+  .settings-grid { grid-template-columns: 1fr; }
   .rc-row { grid-template-columns: 1fr; gap: 8px; }
   .rc-days { justify-content: flex-start; }
 }

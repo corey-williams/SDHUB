@@ -2391,6 +2391,12 @@
       if (bad.length) alerts.push({ d, bad });
     }
     const checked = checkedRegions();
+    // The Coverage gaps button turns red with a count of days that have a gap.
+    const gapDays = checked.length ? alerts.length : 0;
+    $('#gaps-open').classList.toggle('alert', gapDays > 0);
+    $('#gaps-count').hidden = !gapDays;
+    $('#gaps-count').textContent = gapDays;
+    $('#gaps-open').title = gapDays ? `${gapDays} day${gapDays === 1 ? '' : 's'} with a coverage gap in the next 14 days` : 'No coverage gaps in the next 14 days';
     $('#cov-alerts').innerHTML = !checked.length
       ? `<div class="empty-big">Gap alerts are off for every region. Turn them on under Settings → Regions.</div>`
       : alerts.length
@@ -2408,7 +2414,7 @@
             </div>`
           )
           .join('')
-      : `<div class="empty-big">No coverage gaps in the next 14 days ✓<br><span class="small">Checking ${esc(checked.join(', '))}</span></div>`;
+      : `<div class="empty-big">No coverage gaps in the next 14 days ✓</div>`;
 
     const adjs = S.overrides
       .filter((o) => o.end >= today && emp(o.employeeId))
@@ -3940,6 +3946,7 @@
         mutate((d) => { findIn(d.pto, t.dataset.delPto, 'request'); d.pto = d.pto.filter((p) => p.id !== t.dataset.delPto); }, 'Request deleted');
       if (t.dataset.addShift) openOverrideDialog(t.dataset.addShift, S.homeDate);
       if (t.dataset.gotoDay) {
+        if ($('#gaps-dialog').open) $('#gaps-dialog').close();
         S.homeDate = t.dataset.gotoDay;
         // Open Home on the affected region (or All regions if several have gaps).
         if (t.dataset.gotoRegion) {
@@ -4068,7 +4075,9 @@
     });
     $('#rep-csv').addEventListener('click', downloadReportCsv);
     $('#rep-print').addEventListener('click', printReport);
-    $('#adj-more').onclick = () => { S.adjAll = !S.adjAll; renderAdmin(); };
+    $('#gaps-open').onclick = () => $('#gaps-dialog').showModal();
+    $$('#gaps-dialog [data-close]').forEach((b) => (b.onclick = () => $('#gaps-dialog').close()));
+    $('#adj-more').onclick =() => { S.adjAll = !S.adjAll; renderAdmin(); };
     $('#hist-list').addEventListener('click', (ev) => {
       if (ev.target.closest('#hist-all')) S.histAll = true;
       else if (ev.target.closest('#hist-earlier')) {
