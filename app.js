@@ -877,6 +877,7 @@
             .filter((a) => a && DATE_RE.test(a.start || '') && DATE_RE.test(a.end || ''))
             .map((a) => (OLD_REASONS[a.reason] ? { ...a, reason: OLD_REASONS[a.reason] } : a))
         : [],
+      history: Array.isArray(d.history) ? d.history.filter((h) => h && typeof h.at === 'string' && typeof h.action === 'string') : [],
       updatedAt: d.updatedAt || null,
     };
   }
@@ -2412,8 +2413,12 @@
     const adjs = S.overrides
       .filter((o) => o.end >= today && emp(o.employeeId))
       .sort((a, b) => a.start.localeCompare(b.start) || a.employeeId.localeCompare(b.employeeId));
+    const ADJ_SHOW = 5;
+    const more = adjs.length - ADJ_SHOW;
+    $('#adj-more').hidden = more <= 0;
+    $('#adj-more').textContent = S.adjAll ? 'Show less' : `Show ${more} more`;
     $('#adj-list').innerHTML = adjs.length
-      ? adjs
+      ? (S.adjAll ? adjs : adjs.slice(0, ADJ_SHOW))
           .map((o) => {
             const e = emp(o.employeeId);
             return personRow(
@@ -2424,6 +2429,7 @@
           })
           .join('')
       : `<div class="empty-big">No current or upcoming adjustments.</div>`;
+    renderHistory();
 
     // Regions table: show/hide, and per-region coverage gap alerts.
     $('#region-toggles').innerHTML =
@@ -2460,6 +2466,55 @@
           .join('')
       : `<p class="muted small">No titles yet. Add one below.</p>`;
     renderReport();
+  }
+
+  // ---------- history ----------
+  // Oldest at the top, today at the bottom (like a chat). "Show earlier" reaches back a week at a time.
+  const HIST_ICONS = { approved: '✓', denied: '✕', pending: '↺', adjust: '⏱', unadjust: '⏱', split: '⇄', unsplit: '⇄', late: '⏰', absent: '●', unabsent: '○' };
+  function renderHistory() {
+    const box = $('#hist-list');
+    const today = ymd(new Date());
+    if (!S.histFrom) S.histFrom = today;
+    const all = S.data?.history || [];
+    const dayOf = (h) => ymd(new Date(h.at));
+    const shown = all.filter((h) => S.histAll || dayOf(h) >= S.histFrom).sort((a, b) => a.at.localeCompare(b.at));
+    const older = S.histAll ? [] : all.filter((h) => dayOf(h) < S.histFrom);
+    const groups = new Map();
+    if (!S.histAll || shown.length) groups.set(today, []); // Today is always shown, even if it's empty
+    for (const h of shown) {
+      const k = dayOf(h);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(h);
+    }
+    const dayLabel = (k) => (k === today ? 'Today' : k === addDays(today, -1) ? 'Yesterday' : fmtDate(k, { weekday: 'long', month: 'short', day: 'numeric', year: k.slice(0, 4) === today.slice(0, 4) ? undefined : 'numeric' }));
+    const row = (h) => {
+      const e = emp(h.employeeId);
+      const time = new Date(h.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      return `<div class="hist-row k-${esc(h.kind || '')}">
+        <span class="hist-time">${esc(time)}</span>
+        <span class="hist-ico" aria-hidden="true">${HIST_ICONS[h.kind] || '•'}</span>
+        <div class="hist-main">
+          <div class="hist-title"><b>${esc(h.action)}</b>${h.name || e ? ` · <span class="hist-who" style="--c:${e?.color || 'var(--faint)'}">${esc(e?.name || h.name)}</span>` : ''}</div>
+          <div class="req-meta">${h.detail ? `${esc(h.detail)} · ` : ''}by ${esc(whoLabel(h.by) || 'Unknown')}</div>
+        </div>
+      </div>`;
+    };
+    const top = S.histAll
+      ? `<div class="hist-top muted small">${all.length ? 'Beginning of history' : ''}</div>`
+      : older.length
+      ? `<div class="hist-top"><button type="button" class="btn ghost xs" id="hist-earlier">Show earlier</button><button type="button" class="btn ghost xs" id="hist-all">Show all (${all.length})</button></div>`
+      : `<div class="hist-top muted small">${all.length ? 'Beginning of history' : 'Actions will be logged here from now on.'}</div>`;
+    const html =
+      top +
+      [...groups.keys()]
+        .sort()
+        .map((k) => `<div class="hist-day">${esc(dayLabel(k))}</div>${groups.get(k).length ? groups.get(k).map(row).join('') : `<div class="empty hist-empty">Nothing logged ${k === today ? 'today' : 'this day'} yet.</div>`}`)
+        .join('');
+    if (box.dataset.html === html) return; // unchanged: leave the scroll position alone
+    // The box is column-reverse, so it opens scrolled to the newest entry and stays
+    // anchored to the bottom when older days are added above.
+    box.innerHTML = `<div>${html}</div>`;
+    box.dataset.html = html;
   }
 
   // ---------- call-in report ----------
@@ -3264,6 +3319,30 @@
     if (!item) throw new Error(`That ${label} no longer exists (someone may have just removed it)`);
     return item;
   }
+  // ---------- history ----------
+  // Who approved/denied PTO, adjusted hours, or marked someone late/absent. Kept in
+  // data.json (newest HISTORY_MAX entries) and shown under Admin → History.
+  const HISTORY_MAX = 3000;
+  function logEvent(d, kind, employeeId, action, detail) {
+    d.history = Array.isArray(d.history) ? d.history : [];
+    const e = d.employees.find((x) => x.id === employeeId);
+    d.history.push({ id: uid(), at: new Date().toISOString(), by: actorName(), kind, employeeId, name: e?.name || '', action, detail: detail || '' });
+    if (d.history.length > HISTORY_MAX) d.history.splice(0, d.history.length - HISTORY_MAX);
+  }
+  const ptoDetail = (p) => `${fmtRangeShort(p.start, p.end)}${isPartial(p) ? ` · ${ptoHours(p)}` : ''}`;
+  const ovrDetail = (o) => `${fmtRangeShort(o.start, o.end)} · ${fmtTime(o.startTime)} – ${fmtTime(o.endTime)}${o.allDays ? ' · incl. days off' : ''}${o.note ? ` · ${o.note}` : ''}`;
+  const splitDetail = (s, day) =>
+    `Covering ${s.region} · ${fmtTime(s.startTime)} – ${fmtTime(s.endTime)} · ${
+      day ? `${fmtRangeShort(day, day)} only` : s.repeat && s.repeat !== 'none' ? `${s.repeat === 'daily' ? 'every day' : 'weekly'} from ${fmtRangeShort(s.date, s.date)}${s.until ? ` until ${fmtRangeShort(s.until, s.until)}` : ''}` : fmtRangeShort(s.date, s.date)
+    }`;
+  const absAction = (a) => (a.reason === LEAVING ? 'Marked leaving early' : isTimed(a.reason) && a.arriveAt ? 'Marked late' : `Marked absent: ${a.reason}`);
+  const absDetail = (a) => `${fmtRangeShort(a.start, a.end)}${a.arriveAt ? ` · ${a.reason === LEAVING ? 'leaving' : 'in'} at ${fmtTime(a.arriveAt)}` : ''}${a.note ? ` · ${a.note}` : ''}`;
+  function logOverrideRemoved(d, id) {
+    const o = findIn(d.overrides, id, 'adjustment');
+    logEvent(d, 'unadjust', o.employeeId, 'Removed hours adjustment', ovrDetail(o));
+    d.overrides = d.overrides.filter((x) => x.id !== id);
+  }
+
   const setStatus = async (id, status, msg) => {
     const ok = await mutate((d) => {
       const p = findIn(d.pto, id, 'request');
@@ -3271,6 +3350,8 @@
       p.decidedAt = status === 'pending' ? null : new Date().toISOString();
       if (status === 'pending') delete p.decidedBy;
       else p.decidedBy = actorName();
+      const action = { approved: 'Approved PTO', denied: 'Denied PTO', pending: 'Moved PTO back to pending' }[status];
+      logEvent(d, status, p.employeeId, action, ptoDetail(p));
     }, msg);
     const p = S.pto.find((x) => x.id === id);
     if (ok && status === 'approved' && p) warnGaps(p.start, p.end, regionOf(emp(p.employeeId) || {}));
@@ -3487,6 +3568,7 @@
       const day = S.ovrDate;
       const ok = await mutate((d) => {
         const s = findIn(d.splits, id, 'split');
+        logEvent(d, 'unsplit', s.employeeId, 'Removed split shift', splitDetail(s, oneDay ? day : ''));
         if (oneDay) s.skip = [...new Set([...(s.skip || []), day])];
         else d.splits = d.splits.filter((x) => x.id !== id);
       }, oneDay ? 'Split removed for this day' : 'Split shift removed');
@@ -3505,7 +3587,8 @@
       const id = S.absEditing;
       if (!id) return;
       const ok = await mutate((d) => {
-        findIn(d.absences, id, 'absence');
+        const a = findIn(d.absences, id, 'absence');
+        logEvent(d, 'unabsent', a.employeeId, `Removed ${a.reason === LEAVING ? 'leaving early' : isTimed(a.reason) ? 'late' : 'absence'}`, `${a.reason} · ${absDetail(a)}`);
         d.absences = d.absences.filter((a) => a.id !== id);
       }, 'Absence removed');
       if (ok) $('#ovr-dialog').close();
@@ -3529,6 +3612,7 @@
             Object.assign(a, clean, { updatedAt: new Date().toISOString() });
           }
           else d.absences.push({ id: uid(), employeeId: empId, ...clean, createdAt: new Date().toISOString() });
+          logEvent(d, isTimed(clean.reason) ? 'late' : 'absent', empId, id ? `Updated: ${absAction(clean).replace(/^Marked /, '')}` : absAction(clean), absDetail(clean));
         }, id ? 'Updated' : clean.arriveAt ? (clean.reason === LEAVING ? `${firstName(emp(empId).name)} leaving early at ${fmtTime(clean.arriveAt)}` : `${firstName(emp(empId).name)} is late, in at ${fmtTime(clean.arriveAt)}`) : `${firstName(emp(empId).name)} marked absent: ${clean.reason}`);
         if (ok) {
           $('#ovr-dialog').close();
@@ -3557,6 +3641,7 @@
             s.skip = [...new Set([...(s.skip || []), day])];
             d.splits.push({ id: uid(), employeeId: empId, ...clean, date: day, repeat: 'none', until: '', createdAt: new Date().toISOString() });
           } else Object.assign(findIn(d.splits, id, 'split'), clean);
+          logEvent(d, 'split', empId, id ? 'Changed split shift' : 'Added split shift', splitDetail(clean, oneDay ? day : ''));
         }, !id ? `${firstName(emp(empId).name)} covers ${clean.region}${clean.repeat !== 'none' ? ' (repeating)' : ''}` : oneDay ? 'Split updated for this day' : 'Split shift updated');
         if (ok) {
           $('#ovr-dialog').close();
@@ -3579,6 +3664,7 @@
         // Older adjustments that fall entirely inside the new range are replaced by it.
         d.overrides = d.overrides.filter((o) => !(o.employeeId === empId && o.start >= clean.start && o.end <= clean.end));
         d.overrides.push({ id: uid(), employeeId: empId, ...clean, createdAt: new Date().toISOString() });
+        logEvent(d, 'adjust', empId, 'Adjusted hours', ovrDetail(clean));
       }, 'Hours adjusted');
       if (ok) {
         $('#ovr-dialog').close();
@@ -3588,10 +3674,7 @@
     $('#ovr-remove').onclick = async () => {
       const id = S.ovrExisting;
       if (!id) return;
-      const ok = await mutate((d) => {
-        findIn(d.overrides, id, 'adjustment');
-        d.overrides = d.overrides.filter((o) => o.id !== id);
-      }, 'Adjustment removed');
+      const ok = await mutate((d) => logOverrideRemoved(d, id), 'Adjustment removed');
       if (ok) $('#ovr-dialog').close();
     };
 
@@ -3868,7 +3951,7 @@
         window.scrollTo(0, 0);
       }
       if (t.dataset.delOvr)
-        mutate((d) => { findIn(d.overrides, t.dataset.delOvr, 'adjustment'); d.overrides = d.overrides.filter((o) => o.id !== t.dataset.delOvr); }, 'Adjustment removed');
+        mutate((d) => logOverrideRemoved(d, t.dataset.delOvr), 'Adjustment removed');
       if (t.dataset.edit) openEmployeeDialog(emp(t.dataset.edit));
       if (t.dataset.delEmp) {
         const e = emp(t.dataset.delEmp);
@@ -3985,6 +4068,17 @@
     });
     $('#rep-csv').addEventListener('click', downloadReportCsv);
     $('#rep-print').addEventListener('click', printReport);
+    $('#adj-more').onclick = () => { S.adjAll = !S.adjAll; renderAdmin(); };
+    $('#hist-list').addEventListener('click', (ev) => {
+      if (ev.target.closest('#hist-all')) S.histAll = true;
+      else if (ev.target.closest('#hist-earlier')) {
+        // Back to the most recent earlier day that has something, plus the week before it.
+        const days = (S.data?.history || []).map((h) => ymd(new Date(h.at))).filter((k) => k < S.histFrom).sort();
+        if (!days.length) return;
+        S.histFrom = addDays(days[days.length - 1], -6);
+      } else return;
+      renderHistory();
+    });
 
     // Notes visible to everyone on/off
     $('#notes-toggle').addEventListener('change', (ev) => {
