@@ -447,6 +447,30 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .wd.on { color: color-mix(in srgb, var(--c) 75%, black); background: color-mix(in srgb, var(--c) 18%, white); border-color: color-mix(in srgb, var(--c) 35%, white); }
 .sched-hours { font-size: 12.5px; font-weight: 550; line-height: 1.5; white-space: nowrap; }
 .sched-days { display: inline-block; min-width: 62px; margin-right: 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+/* Admin → Call-in report */
+.rep-card { grid-column: 1 / -1; min-width: 0; }
+.rep-tools { display: flex; gap: 6px; }
+.rep-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 14px; }
+.rep-filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.rep-filters select { min-width: 200px; }
+.rep-presets { align-self: flex-end; }
+.rep-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.rep-stat { display: flex; align-items: baseline; gap: 6px; padding: 7px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
+.rep-stat b { font-size: 17px; color: var(--text); }
+.rep-stat.main { background: var(--accent-soft); border-color: transparent; }
+.rep-stat.main b { color: var(--accent); }
+.rep-stat.zero { opacity: .55; }
+.rep-table { --cols: minmax(180px, 2fr) repeat(7, minmax(56px, .6fr)) minmax(80px, .8fr); }
+.rep-row { display: grid; grid-template-columns: var(--cols); gap: 10px; align-items: center; width: 100%; padding: 8px; border: 0; border-top: 1px solid var(--border); background: none; font: inherit; font-size: 13px; color: var(--text); text-align: left; cursor: pointer; }
+.rep-row:hover:not(.rep-head) { background: var(--surface-2); border-radius: 10px; }
+.rep-head { cursor: default; border-top: 0; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.rep-name { display: flex; align-items: center; gap: 10px; font-weight: 600; min-width: 0; }
+.rep-name .avatar { width: 26px; height: 26px; font-size: 10.5px; }
+.rep-item .tag.absent { min-width: 92px; text-align: center; }
+@media (max-width: 760px) {
+  .rep-table { --cols: minmax(130px, 1fr) 50px 50px; }
+  .rep-row > :nth-child(n + 4) { display: none; }
+}
 @media (max-width: 980px) {
   .sync { display: none; }
   .brand { white-space: nowrap; }

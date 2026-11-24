@@ -2230,6 +2230,158 @@
           })
           .join('')
       : `<p class="muted small">No titles yet. Add one below.</p>`;
+    renderReport();
+  }
+
+  // ---------- call-in report ----------
+  // Absences (Sick, Personal, Other, Late, Leaving early) for one person or everyone over a date range.
+  const REP_REASONS = ['Sick', 'Personal', 'Other', 'Late', LEAVING];
+  function repRange(preset) {
+    const today = ymd(new Date());
+    if (preset === 'all') {
+      const first = (S.data?.absences || []).reduce((m, a) => (a.start < m ? a.start : m), today);
+      return { from: first, to: today };
+    }
+    if (preset === 'year') return { from: `${today.slice(0, 4)}-01-01`, to: today };
+    return { from: addDays(today, -(+preset - 1)), to: today };
+  }
+  // Their regular working days inside the part of the absence that falls in the range (at least 1).
+  function repDays(a, e, from, to) {
+    const s = a.start > from ? a.start : from, en = a.end < to ? a.end : to;
+    let n = 0;
+    for (let d = s; d <= en; d = addDays(d, 1)) if (e.schedule?.[parseYmd(d).getDay()]?.on) n++;
+    return Math.max(n, 1);
+  }
+  function reportRows() {
+    const r = S.rep;
+    return (S.data?.absences || [])
+      .filter((a) => emp(a.employeeId) && (!r.emp || a.employeeId === r.emp) && a.start <= r.to && a.end >= r.from)
+      .map((a) => {
+        const e = emp(a.employeeId);
+        const timed = isLate(a);
+        return { a, e, timed, days: timed ? 0 : repDays(a, e, r.from, r.to) };
+      })
+      .sort((x, y) => y.a.start.localeCompare(x.a.start) || x.e.name.localeCompare(y.e.name));
+  }
+  function repCounts(rows) {
+    const c = { total: rows.length, days: 0 };
+    for (const x of rows) {
+      c[x.a.reason] = (c[x.a.reason] || 0) + 1;
+      c.days += x.days;
+    }
+    return c;
+  }
+  function repWhen(x) {
+    const r = fmtRangeShort(x.a.start, x.a.end);
+    return x.timed ? `${r} · ${x.a.reason === LEAVING ? 'left at' : 'in at'} ${fmtTime(x.a.arriveAt)}` : r;
+  }
+  function renderReport() {
+    if (!S.rep) S.rep = { emp: '', preset: 'year', ...repRange('year') };
+    const r = S.rep;
+    if (r.emp && !emp(r.emp)) r.emp = '';
+    if (r.preset) Object.assign(r, repRange(r.preset));
+    const sel = $('#rep-emp');
+    sel.innerHTML =
+      `<option value="">Everyone</option>` +
+      regionGroups()
+        .map((g) => {
+          const list = S.employees.filter((e) => regionOf(e) === g).sort((x, y) => x.name.localeCompare(y.name));
+          return list.length ? `<optgroup label="${esc(regionLabel(g))}">${list.map((e) => `<option value="${e.id}">${esc(e.name)}</option>`).join('')}</optgroup>` : '';
+        })
+        .join('');
+    sel.value = r.emp;
+    if (document.activeElement !== $('#rep-from')) $('#rep-from').value = r.from;
+    if (document.activeElement !== $('#rep-to')) $('#rep-to').value = r.to;
+    $$('#rep-presets [data-rep-preset]').forEach((b) => b.classList.toggle('on', b.dataset.repPreset === r.preset));
+
+    const rows = reportRows();
+    const c = repCounts(rows);
+    const chip = (v, l, cls = '') => `<div class="rep-stat ${cls}"><b>${v}</b><span>${l}</span></div>`;
+    $('#rep-summary').innerHTML =
+      chip(c.total, c.total === 1 ? 'Occurrence' : 'Occurrences', 'main') +
+      chip(c.days, c.days === 1 ? 'Day missed' : 'Days missed') +
+      REP_REASONS.map((x) => chip(c[x] || 0, x, c[x] ? '' : 'zero')).join('') +
+      Object.keys(c)
+        .filter((k) => !['total', 'days', ...REP_REASONS].includes(k))
+        .map((k) => chip(c[k], k))
+        .join('');
+    $('#rep-csv').disabled = $('#rep-print').disabled = !rows.length;
+
+    const range = fmtRange(r.from, r.to);
+    if (!rows.length) {
+      $('#rep-list').innerHTML = `<div class="empty-big">No call-ins ${r.emp ? `for ${esc(emp(r.emp).name)} ` : ''}from ${esc(range)}.</div>`;
+      return;
+    }
+    if (!r.emp) {
+      // Everyone: one line per person, most occurrences first. Click to see their details.
+      const by = new Map();
+      for (const x of rows) (by.get(x.e.id) || by.set(x.e.id, []).get(x.e.id)).push(x);
+      const people = [...by.values()].sort((p, q) => q.length - p.length || p[0].e.name.localeCompare(q[0].e.name));
+      $('#rep-list').innerHTML =
+        `<div class="rep-table"><div class="rep-row rep-head"><span>Employee</span><span>Total</span><span>Days</span>${REP_REASONS.map((x) => `<span>${x === LEAVING ? 'Left early' : x}</span>`).join('')}<span>Last</span></div>` +
+        people
+          .map((list) => {
+            const e = list[0].e, k = repCounts(list);
+            return `<button type="button" class="rep-row" data-rep-person="${e.id}" title="Show ${esc(e.name)}'s call-ins">
+              <span class="rep-name">${avatar(e)}<span>${esc(e.name)}</span></span><b>${k.total}</b><span>${k.days}</span>
+              ${REP_REASONS.map((x) => `<span class="${k[x] ? '' : 'muted'}">${k[x] || '–'}</span>`).join('')}
+              <span class="muted small">${esc(fmtRangeShort(list[0].a.start, list[0].a.start))}</span></button>`;
+          })
+          .join('') +
+        `</div>`;
+      return;
+    }
+    $('#rep-list').innerHTML = rows
+      .map(
+        (x) => `<div class="req rep-item">
+          <span class="tag absent">${esc(x.a.reason)}</span>
+          <div class="req-main">
+            <div class="req-title">${esc(repWhen(x))}${x.days > 1 ? ` <span class="muted small">· ${x.days} work days</span>` : ''}</div>
+            ${x.a.note || x.a.setBy ? `<div class="req-meta">${x.a.note ? esc(x.a.note) : ''}${x.a.note && x.a.setBy ? ' · ' : ''}${x.a.setBy ? `<span class="req-by">${esc(byLine('Set', x.a.setBy, x.a.setAt))}</span>` : ''}</div>` : ''}
+          </div>
+          <button type="button" class="btn ghost xs" data-rep-abs="${x.a.id}">Edit</button>
+        </div>`
+      )
+      .join('');
+  }
+  function reportTitle() {
+    const r = S.rep;
+    return `Call-in report · ${r.emp ? emp(r.emp).name : 'Everyone'} · ${fmtRange(r.from, r.to)}`;
+  }
+  function downloadReportCsv() {
+    const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = [['Employee', 'Region', 'Start', 'End', 'Reason', 'Time', 'Work days', 'Note', 'Set by', 'Set on'].map(q).join(',')];
+    for (const x of reportRows())
+      lines.push(
+        [x.e.name, regionLabel(regionOf(x.e)), x.a.start, x.a.end, x.a.reason, x.timed ? fmtTime(x.a.arriveAt) : '', x.days || '',x.a.note || '', x.a.setBy ? whoLabel(x.a.setBy) : '', x.a.setAt ? x.a.setAt.slice(0, 10) : '']
+          .map(q)
+          .join(',')
+      );
+    const r = S.rep;
+    const who = r.emp ? emp(r.emp).name.replace(/[^\w-]+/g, '-') : 'everyone';
+    const url = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' }));
+    const link = Object.assign(document.createElement('a'), { href: url, download: `call-ins-${who}-${r.from}-to-${r.to}.csv` });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  function printReport() {
+    const rows = reportRows(), c = repCounts(rows);
+    const w = window.open('', '_blank', 'width=900,height=700');
+    if (!w) return toast('Allow pop-ups to print the report', 'warn');
+    const sums = [`${c.total} occurrence${c.total === 1 ? '' : 's'}`, `${c.days} day${c.days === 1 ? '' : 's'} missed`, ...REP_REASONS.filter((x) => c[x]).map((x) => `${x}: ${c[x]}`)].join(' · ');
+    const body = rows
+      .map((x) => `<tr><td>${esc(x.e.name)}</td><td>${esc(repWhen(x))}</td><td>${esc(x.a.reason)}</td><td>${x.days || ''}</td><td>${esc(x.a.note || '')}</td><td>${x.a.setBy ? esc(byLine('Set', x.a.setBy, x.a.setAt)) : ''}</td></tr>`)
+      .join('');
+    w.document.write(`<!DOCTYPE html><html><head><title>${esc(reportTitle())}</title><style>
+      body{font:13px/1.45 'Segoe UI',system-ui,sans-serif;color:#111;margin:28px}h1{font-size:19px;margin:0 0 4px}p{margin:0 0 16px;color:#555}
+      table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #ddd;vertical-align:top}th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#666}
+      </style></head><body><h1>${esc(reportTitle())}</h1><p>${esc(sums)} · Printed ${esc(fmtDate(ymd(new Date()), { month: 'short', day: 'numeric', year: 'numeric' }))}</p>
+      <table><thead><tr><th>Employee</th><th>When</th><th>Reason</th><th>Work days</th><th>Note</th><th>Set by</th></tr></thead><tbody>${body}</tbody></table></body></html>`);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 200);
   }
 
   // ---------- Admin → Holidays ----------
@@ -3543,6 +3695,36 @@
         if (!ok) ev.target.checked = !on;
       });
     });
+
+    // Call-in report filters
+    $('#rep-emp').addEventListener('change', (ev) => {
+      S.rep.emp = ev.target.value;
+      renderReport();
+    });
+    for (const id of ['#rep-from', '#rep-to'])
+      $(id).addEventListener('change', () => {
+        const from = $('#rep-from').value, to = $('#rep-to').value;
+        if (!DATE_RE.test(from) || !DATE_RE.test(to)) return;
+        Object.assign(S.rep, from <= to ? { from, to } : { from: to, to: from }, { preset: null });
+        renderReport();
+      });
+    $('#rep-presets').addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-rep-preset]');
+      if (!b) return;
+      S.rep.preset = b.dataset.repPreset;
+      renderReport();
+    });
+    $('#rep-list').addEventListener('click', (ev) => {
+      const p = ev.target.closest('[data-rep-person]');
+      if (p) {
+        S.rep.emp = p.dataset.repPerson;
+        return renderReport();
+      }
+      const a = ev.target.closest('[data-rep-abs]');
+      if (a) openAbsence(a.dataset.repAbs);
+    });
+    $('#rep-csv').addEventListener('click', downloadReportCsv);
+    $('#rep-print').addEventListener('click', printReport);
 
     // Notes visible to everyone on/off
     $('#notes-toggle').addEventListener('change', (ev) => {

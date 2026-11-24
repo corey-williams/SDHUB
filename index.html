@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="app-icon-192.png" />
   <!-- ?v= on styles.css and app.js: changed with each update, so a new page
        never runs with an old cached app.js or styles.css (or the other way round). -->
-  <link rel="stylesheet" href="styles.css?v=20261123-21" />
+  <link rel="stylesheet" href="styles.css?v=20261123-22" />
 </head>
 <body class="disconnected">
   <header class="topbar">
@@ -309,6 +309,29 @@
               </button>
             </div>
             <div id="team-list" class="list"></div>
+          </div>
+          <div class="card rep-card">
+            <div class="card-head">
+              <h2>Call-in report</h2>
+              <div class="rep-tools">
+                <button type="button" class="btn ghost sm" id="rep-print">Print</button>
+                <button type="button" class="btn ghost sm" id="rep-csv">Download CSV</button>
+              </div>
+            </div>
+            <div class="rep-filters">
+              <label><span>Person</span><select id="rep-emp"></select></label>
+              <label><span>From</span><input type="date" id="rep-from" /></label>
+              <label><span>To</span><input type="date" id="rep-to" /></label>
+              <div class="seg rep-presets" id="rep-presets">
+                <button type="button" data-rep-preset="30">30 days</button>
+                <button type="button" data-rep-preset="90">90 days</button>
+                <button type="button" data-rep-preset="365">12 months</button>
+                <button type="button" data-rep-preset="year">This year</button>
+                <button type="button" data-rep-preset="all">All time</button>
+              </div>
+            </div>
+            <div id="rep-summary" class="rep-summary"></div>
+            <div id="rep-list" class="list"></div>
           </div>
           <div class="card cov-card">
             <div class="card-head">
@@ -857,6 +880,6 @@
       setTimeout(show, 12000);
     })();
   </script>
-  <script src="app.js?v=20261123-21"></script>
+  <script src="app.js?v=20261123-22"></script>
 </body>
 </html>
