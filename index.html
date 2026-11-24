@@ -11,13 +11,14 @@
   <link rel="apple-touch-icon" href="app-icon-192.png?v=6" />
   <!-- ?v= on styles.css and app.js: changed with each update, so a new page
        never runs with an old cached app.js or styles.css (or the other way round). -->
-  <link rel="stylesheet" href="styles.css?v=20261124-25" />
+  <link rel="stylesheet" href="styles.css?v=20261124-26" />
   <!-- Dark mode is set before the page draws, so it never flashes light first. -->
   <script>try { if (localStorage.getItem('sdh-theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}</script>
 </head>
 <body class="disconnected">
   <header class="topbar">
     <div class="brand">
+      <img class="brand-logo" src="app-icon-192.png?v=6" alt="" width="28" height="28" />
       <span>Service Desk <strong>Hub</strong></span>
     </div>
     <nav class="tabs" role="tablist">
@@ -917,6 +918,6 @@
       setTimeout(show, 12000);
     })();
   </script>
-  <script src="app.js?v=20261124-25"></script>
+  <script src="app.js?v=20261124-26"></script>
 </body>
 </html>
