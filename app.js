@@ -433,6 +433,125 @@
   const GRIP_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>`;
   const X_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
   // Fork and knife, used for lunch on the shift bars and in the Events feed.
+  // Decorations for closed holiday boxes on the PTO calendar, matched by name.
+  // Add more entries here (e.g. /christmas/i) to theme other holidays.
+  const TURKEY_ART = `<svg class="hol-art" viewBox="0 0 64 64" aria-hidden="true">
+    <g transform="translate(32 40)">
+      <ellipse rx="7" ry="17" cy="-17" fill="#c2410c" transform="rotate(-64)"/>
+      <ellipse rx="7" ry="17" cy="-17" fill="#ea580c" transform="rotate(-32)"/>
+      <ellipse rx="7" ry="17" cy="-17" fill="#f59e0b" transform="rotate(0)"/>
+      <ellipse rx="7" ry="17" cy="-17" fill="#ea580c" transform="rotate(32)"/>
+      <ellipse rx="7" ry="17" cy="-17" fill="#c2410c" transform="rotate(64)"/>
+      <ellipse rx="4" ry="10" cy="-12" fill="#fbbf24" transform="rotate(-32)"/>
+      <ellipse rx="4" ry="10" cy="-12" fill="#fde68a" transform="rotate(0)"/>
+      <ellipse rx="4" ry="10" cy="-12" fill="#fbbf24" transform="rotate(32)"/>
+    </g>
+    <path d="M28 54v6M26 60h4M36 54v6M34 60h4" stroke="#d97706" stroke-width="2" stroke-linecap="round"/>
+    <ellipse cx="32" cy="43" rx="13" ry="13.5" fill="#7c4a1e"/>
+    <ellipse cx="32" cy="46" rx="8" ry="8.5" fill="#a16207"/>
+    <circle cx="32" cy="27" r="7.5" fill="#92561f"/>
+    <circle cx="29.3" cy="25.5" r="1.4" fill="#1c1917"/>
+    <circle cx="34.7" cy="25.5" r="1.4" fill="#1c1917"/>
+    <path d="M30 28.2h4l-2 3.3z" fill="#f59e0b"/>
+    <ellipse cx="34" cy="32.3" rx="1.5" ry="2.8" fill="#dc2626"/>
+  </svg>`;
+  const TREE_ART = `<svg class="hol-art" viewBox="0 0 64 64" aria-hidden="true">
+    <rect x="29" y="51" width="6" height="9" rx="1" fill="#78350f"/>
+    <path d="M32 30 11 53h42z" fill="#166534"/>
+    <path d="M32 20 16 41h32z" fill="#15803d"/>
+    <path d="M32 11 22 29h20z" fill="#16a34a"/>
+    <circle cx="19" cy="50" r="2.2" fill="#dc2626"/><circle cx="30" cy="47" r="2.2" fill="#facc15"/>
+    <circle cx="40" cy="49" r="2.2" fill="#dc2626"/><circle cx="47" cy="50" r="2.2" fill="#60a5fa"/>
+    <circle cx="22" cy="38" r="2.2" fill="#facc15"/><circle cx="32" cy="34" r="2.2" fill="#dc2626"/>
+    <circle cx="42" cy="38" r="2.2" fill="#60a5fa"/>
+    <circle cx="28" cy="25" r="2" fill="#dc2626"/><circle cx="37" cy="26" r="2" fill="#facc15"/>
+    <path d="M32 3l1.5 3.9 4.2.2-3.2 2.7 1 4.1-3.5-2.3-3.5 2.3 1-4.1-3.2-2.7 4.2-.2z" fill="#facc15" stroke="#eab308" stroke-width=".6" stroke-linejoin="round"/>
+  </svg>`;
+  const FLUTE = (x, deg) => `<g transform="translate(${x} 14) rotate(${deg})">
+      <path d="M-6 0H6L4.6 20Q0 25.5-4.6 20Z" fill="#fef3c7" stroke="#b45309" stroke-width="1.2" stroke-linejoin="round"/>
+      <path d="M-5.4 6H5.4L4.6 20Q0 25.5-4.6 20Z" fill="#fbbf24"/>
+      <circle cx="-1.5" cy="12" r=".9" fill="#fff"/><circle cx="1.8" cy="16" r=".8" fill="#fff"/><circle cx="0" cy="9" r=".7" fill="#fff"/>
+      <path d="M0 23.5V38" stroke="#b45309" stroke-width="1.6"/>
+      <ellipse cy="38.5" rx="6" ry="1.6" fill="#b45309"/>
+    </g>`;
+  const CHEERS_ART = `<svg class="hol-art" viewBox="0 0 64 64" aria-hidden="true">
+    ${FLUTE(26, 16)}${FLUTE(38, -16)}
+    <path d="M32 1.5l1.3 3.7 3.7 1.3-3.7 1.3L32 11.5l-1.3-3.7-3.7-1.3 3.7-1.3z" fill="#facc15"/>
+    <path d="M20 6l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z M45 5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" fill="#a78bfa"/>
+    <rect x="10" y="20" width="3" height="1.6" rx=".8" fill="#ec4899" transform="rotate(30 11 21)"/>
+    <rect x="51" y="24" width="3" height="1.6" rx=".8" fill="#22c55e" transform="rotate(-25 52 25)"/>
+    <rect x="12" y="38" width="3" height="1.6" rx=".8" fill="#3b82f6" transform="rotate(-40 13 39)"/>
+    <rect x="50" y="42" width="3" height="1.6" rx=".8" fill="#f59e0b" transform="rotate(35 51 43)"/>
+  </svg>`;
+  // A five-point star as an SVG path, centered on (cx, cy).
+  const starPath = (cx, cy, r) =>
+    'M' + Array.from({ length: 10 }, (_, i) => {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.42 : r;
+      return `${(cx + rr * Math.cos(a)).toFixed(2)} ${(cy + rr * Math.sin(a)).toFixed(2)}`;
+    }).join('L') + 'Z';
+  // Memorial Day: a folded flag in a wooden memorial case.
+  const MEMORIAL_ART = `<svg class="hol-art" viewBox="0 0 64 64" aria-hidden="true">
+    <path d="M32 12 4 50h56z" fill="#7c2d12"/>
+    <path d="M32 14.5 6.5 49h51z" fill="#b45309" opacity=".35"/>
+    <path d="M32 19.5 12 46.5h40z" fill="#1e3a8a"/>
+    <path d="M32 19.5 12 46.5" stroke="#3b5bb5" stroke-width=".8"/>
+    <g fill="#fff">
+      <path d="${starPath(32, 27.5, 2.3)}"/>
+      <path d="${starPath(27.5, 33.5, 2.3)}"/><path d="${starPath(36.5, 33.5, 2.3)}"/>
+      <path d="${starPath(23, 40, 2.3)}"/><path d="${starPath(32, 40, 2.3)}"/><path d="${starPath(41, 40, 2.3)}"/>
+    </g>
+    <rect x="2" y="50" width="60" height="4.5" rx="1.2" fill="#78350f"/>
+    <rect x="25" y="51.2" width="14" height="2.1" rx=".6" fill="#facc15"/>
+  </svg>`;
+  // Independence Day: red, white and blue fireworks bursting over a night sky.
+  const burst = (cx, cy, r, color, n, rot = 0) =>
+    Array.from({ length: n }, (_, i) => {
+      const a = ((i * 360) / n + rot) * (Math.PI / 180), c = Math.cos(a), s = Math.sin(a);
+      const p = (k) => `${(cx + c * r * k).toFixed(2)} ${(cy + s * r * k).toFixed(2)}`;
+      return `<path d="M${p(0.32)}L${p(0.86)}" stroke="${color}" stroke-width="1.6" stroke-linecap="round"/><circle cx="${(cx + c * r).toFixed(2)}" cy="${(cy + s * r).toFixed(2)}" r="1.15" fill="${color}"/>`;
+    }).join('') + `<circle cx="${cx}" cy="${cy}" r="1.6" fill="${color}"/>`;
+  const FIREWORKS_ART = `<svg class="hol-art fw-art" viewBox="0 0 64 64" aria-hidden="true">
+    <path d="M33 62Q31.5 48 32 30" stroke="#fca5a5" stroke-width="1.1" stroke-dasharray="1.6 2.4" fill="none" stroke-linecap="round" opacity=".7"/>
+    ${burst(32, 22, 17, '#ef4444', 14)}
+    ${burst(32, 22, 9, '#fecaca', 8, 22.5)}
+    ${burst(13, 40, 10, '#60a5fa', 10, 9)}
+    ${burst(51, 42, 9, '#f8fafc', 10)}
+    <g fill="#fde68a">
+      <path d="M8 12l.7 1.8 1.8.7-1.8.7L8 17l-.7-1.8-1.8-.7 1.8-.7z"/>
+      <path d="M56 9l.6 1.5 1.5.6-1.5.6L56 13.2l-.6-1.5-1.5-.6 1.5-.6z"/>
+      <path d="M57 26l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z"/>
+    </g>
+  </svg>`;
+  // Labor Day: a word-mark badge. "LABOR" (round flag for the O) over "DAY". Replaces
+  // the usual picture + name. Text is currentColor so it follows light/dark mode.
+  const LABOR_BADGE = (() => {
+    const cx = 63.5, cy = 34.5, r = 8.6, n = 9, h = (2 * r) / n;
+    let stripes = '';
+    for (let i = 0; i < n; i += 2) {
+      const y0 = cy - r + i * h, dy = Math.abs(y0 + h / 2 - cy), half = Math.sqrt(Math.max(0, r * r - dy * dy));
+      stripes += `<rect x="${(cx - half).toFixed(2)}" y="${y0.toFixed(2)}" width="${(2 * half).toFixed(2)}" height="${h.toFixed(2)}" fill="#c8102e"/>`;
+    }
+    const dots = [[-5.6, -4.6], [-2.6, -6.4], [-3, -3], [-6.2, -1.6], [-1.4, -1.2]]
+      .map(([x, y]) => `<circle cx="${(cx + x).toFixed(2)}" cy="${(cy + y).toFixed(2)}" r=".75" fill="#fff"/>`).join('');
+    return `<svg class="lab-badge" viewBox="0 22 100 49" aria-hidden="true">
+      <text x="9" y="43" font-size="24" font-weight="800" textLength="43" lengthAdjust="spacingAndGlyphs" fill="currentColor">LAB</text>
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="#fff"/>${stripes}
+      <path d="M${cx} ${cy}V${cy - r}A${r} ${r} 0 0 0 ${cx - r} ${cy}Z" fill="#1e3a8a"/>${dots}
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="currentColor" stroke-width="1.3"/>
+      <text x="74.5" y="43" font-size="24" font-weight="800" textLength="16" lengthAdjust="spacingAndGlyphs" fill="currentColor">R</text>
+      <text x="50" y="68" text-anchor="middle" font-size="24" font-weight="800" fill="currentColor">DAY</text>
+    </svg>`;
+  })();
+  const HOLIDAY_THEMES = [
+    { match: /thanksgiving/i, cls: 'hol-thanks', art: TURKEY_ART },
+    { match: /christmas/i, cls: 'hol-xmas', art: TREE_ART },
+    { match: /new year/i, cls: 'hol-ny', art: CHEERS_ART },
+    { match: /memorial/i, cls: 'hol-memorial', art: MEMORIAL_ART },
+    { match: /independence|july\s*4|4th of july|fourth of july/i, cls: 'hol-july4', art: FIREWORKS_ART },
+    { match: /labou?r day/i, cls: 'hol-labor', badge: LABOR_BADGE },
+  ];
+  const holidayTheme = (h) => HOLIDAY_THEMES.find((t) => t.match.test(h?.name || '')) || null;
+
   const LUNCH_ICON = `<svg class="lunch-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 2v6a3 3 0 0 0 6 0V2"/><path d="M8 2v20"/><path d="M19 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>`;
   // Pause symbol, used for breaks on the shift bars.
   const BREAK_ICON = `<svg class="lunch-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg>`;
@@ -2051,7 +2170,21 @@
 
       // Holidays go in the top lane first, then PTO bars are stacked into the
       // first lane that's free for all of their days.
-      const holSegs = days.flatMap((d, i) => holidaysOn(ymd(d)).map((h) => ({ h, col: i, span: 1 })));
+      // Full-day holidays close the whole day box: no bars are drawn in it, and
+      // PTO or call-ins that run across it pick up again on the other side, in
+      // the same lane. Half-day holidays still get a bar in the top lane.
+      const closed = days.map((d) => holidaysOn(ymd(d)).find((h) => h.kind === 'full') || null);
+      const holSegs = days.flatMap((d, i) => (closed[i] ? [] : holidaysOn(ymd(d)).map((h) => ({ h, col: i, span: 1 }))));
+      const pieces = (sg) => {
+        const out = [];
+        for (let c = sg.col; c < sg.col + sg.span; c++) {
+          if (closed[c]) continue;
+          const last = out[out.length - 1];
+          if (last && last.col + last.span === c) last.span++;
+          else out.push({ ...sg, col: c, span: 1 });
+        }
+        return out.map((pc) => ({ ...pc, contL: sg.contL || pc.col > sg.col, contR: sg.contR || pc.col + pc.span < sg.col + sg.span }));
+      };
       const occ = []; // occ[lane][col] = taken
       const place = (sg) => {
         let lane = 0;
@@ -2069,13 +2202,16 @@
           return { a, e: emp(a.employeeId), col: daysBetween(ws, s) - 1, span: daysBetween(s, e), contL: a.start < ws, contR: a.end > we };
         })
         .sort((x, y) => x.col - y.col || y.span - x.span || x.e.name.localeCompare(y.e.name));
+      const open = (sg) => pieces(sg).length > 0; // skip anything that falls only on closed days
       holSegs.forEach(place);
-      absSegs.forEach(place);
-      segs.forEach(place);
+      absSegs.filter(open).forEach(place);
+      segs.filter(open).forEach(place);
       const lanes = Math.min(occ.length, MAX_LANES);
       const count = Array(7).fill(0), hidden = Array(7).fill(0);
       for (const sg of [...absSegs, ...segs]) {
+        if (sg.lane == null) continue;
         for (let c = sg.col; c < sg.col + sg.span; c++) {
+          if (closed[c]) continue;
           count[c]++;
           if (sg.lane >= MAX_LANES) hidden[c]++;
         }
@@ -2084,10 +2220,17 @@
       const cells = days
         .map((d, i) => {
           const ds = ymd(d);
-          const hol = holidayOn(ds);
-          const cls = ['day', d.getMonth() !== m && 'other', ds === today && 'today', ds === S.selected && 'selected', (d.getDay() === 0 || d.getDay() === 6) && 'weekend', hol && 'holiday']
+          const hol = closed[i] || holidayOn(ds);
+          const cls = ['day', d.getMonth() !== m && 'other', ds === today && 'today', ds === S.selected && 'selected', (d.getDay() === 0 || d.getDay() === 6) && 'weekend', hol && 'holiday', closed[i] && 'closed']
             .filter(Boolean)
             .join(' ');
+          if (closed[i]) {
+            const th = holidayTheme(hol);
+            return `<button class="${cls}${th ? ` themed ${th.cls}` : ''}" data-date="${ds}" title="${esc(hol.name)}: ${esc(holidayLabel(hol))}" aria-label="${fmtDate(ds, { weekday: 'long', month: 'long', day: 'numeric' })}, ${esc(hol.name)}, office closed">
+            <div class="day-top"><span class="day-num">${d.getDate()}</span></div>
+            <span class="closed-name">${th?.badge || `${th?.art || ''}<span>${esc(hol.name)}</span>`}<small class="closed-sub">- Closed -</small></span>
+          </button>`;
+          }
           return `<button class="${cls}" data-date="${ds}" aria-label="${fmtDate(ds, { weekday: 'long', month: 'long', day: 'numeric' })}${hol ? `, ${esc(hol.name)}` : ''}${count[i] ? `, ${count[i]} on PTO` : ''}">
             <div class="day-top"><span class="day-num">${d.getDate()}</span>${count[i] ? `<span class="day-count">${count[i]} off</span>` : ''}</div>
             ${hidden[i] ? `<span class="more" data-more="${ds}" title="See everyone out this day">+${hidden[i]} more</span>` : ''}
@@ -2104,6 +2247,7 @@
         .join('');
       const absBars = absSegs
         .filter((sg) => sg.lane < MAX_LANES)
+        .flatMap(pieces)
         .map((sg) => {
           const what = absenceLabel(sg.a);
           const cls = ['pto-bar', 'abs-bar', sg.contL && 'cont-l', sg.contR && 'cont-r'].filter(Boolean).join(' ');
@@ -2113,6 +2257,7 @@
         .join('');
       const bars = holBars + absBars + segs
         .filter((sg) => sg.lane < MAX_LANES)
+        .flatMap(pieces)
         .map((sg) => {
           const pending = sg.p.status === 'pending';
           const cls = ['pto-bar', pending && 'pending', sg.contL && 'cont-l', sg.contR && 'cont-r'].filter(Boolean).join(' ');

@@ -625,6 +625,99 @@ body.is-supervisor .admin-only { display: none !important; }
 .pto-bar.hol-bar.half { background: color-mix(in srgb, var(--accent) 18%, var(--mix)); color: var(--accent-text); border: 1.5px solid var(--accent); line-height: 19px; }
 .pto-bar.hol-bar em { opacity: .85; }
 .week-days .day.holiday { background: color-mix(in srgb, var(--accent) 7%, var(--mix)); }
+/* Full-day holiday: the whole box is greyed out with just the name in the middle. */
+.week-days .day.closed { background: color-mix(in srgb, var(--muted) 20%, var(--mix)); }
+.week-days .day.closed:hover { background: color-mix(in srgb, var(--muted) 26%, var(--mix)); }
+.week-days .day.closed.selected { border-color: var(--accent); }
+.week-days .day.closed .day-num { color: var(--muted); }
+/* Sits under the date and fills the rest of the box, centered. It's in the normal
+   flow (not pinned) so a long name that wraps makes the box taller instead of being cut off. */
+.closed-name {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: 0 2px 6px; text-align: center; line-height: 1.2;
+  font-size: 13px; font-weight: 650; color: var(--muted); pointer-events: none;
+}
+/* Themed holidays (see HOLIDAY_THEMES in app.js) add a picture above the name. */
+.day.themed .day-top { margin-bottom: -10px; }
+.hol-art { width: 44px; height: 44px; flex: none; }
+.day.closed:hover .hol-art { transform: rotate(-6deg) scale(1.06); transition: transform .15s; }
+.week-days .day.closed.hol-thanks {
+  background:
+    radial-gradient(circle at 50% 62%, color-mix(in srgb, #f59e0b 22%, transparent), transparent 70%),
+    color-mix(in srgb, #ea580c 12%, var(--mix));
+  border-color: color-mix(in srgb, #ea580c 35%, transparent);
+}
+.week-days .day.closed.hol-thanks:hover { background: color-mix(in srgb, #ea580c 18%, var(--mix)); }
+.day.hol-thanks .closed-name, .day.hol-thanks .day-num { color: color-mix(in srgb, #c2410c 85%, var(--ink)); }
+:root[data-theme="dark"] .day.hol-thanks .closed-name, :root[data-theme="dark"] .day.hol-thanks .day-num { color: #fdba74; }
+.closed-sub { font-size: 11px; font-weight: 600; opacity: .8; letter-spacing: .02em; white-space: nowrap; }
+/* Christmas: soft red with a light dusting of snow. */
+.week-days .day.closed.hol-xmas {
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, .9) 1.2px, transparent 1.8px) 0 0 / 16px 16px,
+    radial-gradient(circle, rgba(255, 255, 255, .6) 1px, transparent 1.6px) 8px 8px / 16px 16px,
+    color-mix(in srgb, #dc2626 12%, var(--mix));
+  border-color: color-mix(in srgb, #dc2626 35%, transparent);
+}
+.week-days .day.closed.hol-xmas:hover { background-color: color-mix(in srgb, #dc2626 18%, var(--mix)); }
+.day.hol-xmas .closed-name, .day.hol-xmas .day-num { color: color-mix(in srgb, #b91c1c 85%, var(--ink)); }
+.day.hol-xmas .closed-sub { color: color-mix(in srgb, #15803d 85%, var(--ink)); opacity: 1; }
+:root[data-theme="dark"] .day.hol-xmas .closed-name, :root[data-theme="dark"] .day.hol-xmas .day-num { color: #fca5a5; }
+:root[data-theme="dark"] .day.hol-xmas .closed-sub { color: #86efac; }
+/* New Year's Day: purple with gold and pink confetti. */
+.week-days .day.closed.hol-ny {
+  background:
+    radial-gradient(circle, rgba(250, 204, 21, .55) 1.3px, transparent 1.9px) 0 0 / 18px 18px,
+    radial-gradient(circle, rgba(236, 72, 153, .4) 1.1px, transparent 1.7px) 9px 9px / 18px 18px,
+    color-mix(in srgb, #7c3aed 11%, var(--mix));
+  border-color: color-mix(in srgb, #7c3aed 35%, transparent);
+}
+.day.hol-ny .closed-name, .day.hol-ny .day-num { color: color-mix(in srgb, #6d28d9 85%, var(--ink)); }
+.day.hol-ny .closed-sub { color: color-mix(in srgb, #b45309 85%, var(--ink)); opacity: 1; }
+:root[data-theme="dark"] .day.hol-ny .closed-name, :root[data-theme="dark"] .day.hol-ny .day-num { color: #c4b5fd; }
+:root[data-theme="dark"] .day.hol-ny .closed-sub { color: #fcd34d; }
+/* Memorial Day: quiet navy, no decoration beyond the poppy. */
+.week-days .day.closed.hol-memorial { background: color-mix(in srgb, #1e3a8a 9%, var(--mix)); border-color: color-mix(in srgb, #1e3a8a 28%, transparent); }
+.day.hol-memorial .closed-name, .day.hol-memorial .day-num { color: color-mix(in srgb, #1e3a8a 85%, var(--ink)); }
+:root[data-theme="dark"] .week-days .day.closed.hol-memorial { background: color-mix(in srgb, #3b82f6 12%, var(--mix)); }
+:root[data-theme="dark"] .day.hol-memorial .closed-name, :root[data-theme="dark"] .day.hol-memorial .day-num { color: #bfdbfe; }
+/* Independence Day: fireworks over a night sky (same in light and dark mode). */
+.week-days .day.closed.hol-july4 {
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, .5) .8px, transparent 1.3px) 3px 5px / 19px 23px,
+    radial-gradient(circle, rgba(255, 255, 255, .3) .7px, transparent 1.2px) 12px 14px / 23px 19px,
+    radial-gradient(ellipse at 50% 30%, #1e3a8a, #0b1430 75%);
+  border-color: #1e3a8a;
+}
+.day.hol-july4 .closed-name, .week-days .day.closed.hol-july4 .day-num { color: #f8fafc; }
+.day.hol-july4 .closed-sub { color: #fca5a5; opacity: 1; }
+.day.hol-july4 .fw-art { width: 54px; height: 54px; filter: drop-shadow(0 0 3px rgba(239, 68, 68, .45)); }
+.day.closed.hol-july4:hover .hol-art { transform: scale(1.08); }
+/* Labor Day: a clean word-mark badge on white with navy text. */
+.week-days .day.closed.hol-labor { background: var(--surface); border-color: color-mix(in srgb, #1e2a4a 30%, transparent); }
+.day.hol-labor .closed-name, .day.hol-labor .day-num { color: #1e2a4a; }
+.day.hol-labor .closed-sub { color: #c8102e; opacity: 1; }
+.lab-badge { width: 100%; max-width: 132px; height: auto; display: block; flex: none; margin: 8px 0 6px; }
+.day.hol-labor .closed-name { padding: 0 0 6px; gap: 0; }
+:root[data-theme="dark"] .day.hol-labor .closed-name, :root[data-theme="dark"] .day.hol-labor .day-num { color: #e6e8f3; }
+:root[data-theme="dark"] .day.hol-labor .closed-sub { color: #fca5a5; }
+/* Dark mode: softer patterns so the text stays easy to read. */
+:root[data-theme="dark"] .week-days .day.closed.hol-ny {
+  background:
+    radial-gradient(circle, rgba(250, 204, 21, .22) 1.2px, transparent 1.8px) 0 0 / 18px 18px,
+    radial-gradient(circle, rgba(236, 72, 153, .16) 1px, transparent 1.6px) 9px 9px / 18px 18px,
+    color-mix(in srgb, #7c3aed 16%, var(--mix));
+}
+:root[data-theme="dark"] .week-days .day.closed.hol-labor { background: color-mix(in srgb, #1e3a8a 14%, var(--mix)); border-color: color-mix(in srgb, #93c5fd 25%, transparent); }
+/* Hover: just darken the base color a little, keep the pattern. */
+.week-days .day.closed.themed:hover { filter: brightness(.97); }
+:root[data-theme="dark"] .week-days .day.closed.themed:hover { filter: brightness(1.12); }
+:root[data-theme="dark"] .week-days .day.closed.hol-xmas {
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, .16) 1.2px, transparent 1.8px) 0 0 / 16px 16px,
+    radial-gradient(circle, rgba(255, 255, 255, .09) 1px, transparent 1.6px) 8px 8px / 16px 16px,
+    color-mix(in srgb, #dc2626 16%, var(--mix));
+}
 
 /* ---------- coverage ---------- */
 .cov-banner { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; border-radius: var(--radius); }
