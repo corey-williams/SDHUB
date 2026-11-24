@@ -345,7 +345,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 /* Pending approvals is as tall as Schedule adjustments beside it; extra requests scroll. */
 .appr-card { align-self: stretch; display: flex; flex-direction: column; min-width: 0; }
 .appr-card #approval-list { flex: 1; min-height: 160px; overflow-y: auto; contain: size; }
-.appr-card .empty-big { padding: 24px 12px; }
+.appr-card #approval-list { display: flex; flex-direction: column; }
+.appr-card .empty-big { padding: 24px 12px; margin: auto 0; } /* "All caught up" sits in the middle of the card */
 .list-more { display: block; margin: 8px auto 0; }
 
 /* History: oldest at top, today at the bottom. column-reverse opens it scrolled to the bottom. */
