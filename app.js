@@ -2042,7 +2042,7 @@
             sub(e, '')
           )
         );
-      html += `<div class="ooo-sec">${section(`${oooIcon}Call-ins`, rows.length, rows.join(''))}</div>`;
+      html += `<div class="ooo-sec">${section(`${oooIcon}Call-ins / Late / Early Out`, rows.length, rows.join(''))}</div>`;
     }
 
     // 1. PTO.
@@ -3198,10 +3198,10 @@
     $('#abs-start-label').textContent = timed ? 'Date' : 'From';
     $('#abs-hint').innerHTML =
       reason === 'Late'
-        ? "Their bar keeps its normal hours with a striped <b>Late</b> block until they arrive (coverage counts them from then), and they're listed under <b>Call-ins</b> in Events."
+        ? "Their bar keeps its normal hours with a striped <b>Late</b> block until they arrive (coverage counts them from then), and they're listed under <b>Call-ins / Late / Early Out</b> in Events."
         : reason === LEAVING
-          ? "Their bar keeps its normal hours with a striped <b>Leaving early</b> block from when they leave (coverage stops counting them then), and they're listed under <b>Call-ins</b> in Events."
-          : "They're taken off the schedule and coverage for these days and listed under <b>Call-ins</b> in Events.";
+          ? "Their bar keeps its normal hours with a striped <b>Leaving early</b> block from when they leave (coverage stops counting them then), and they're listed under <b>Call-ins / Late / Early Out</b> in Events."
+          : "They're taken off the schedule and coverage for these days and listed under <b>Call-ins / Late / Early Out</b> in Events.";
   }
   function cleanAbsence() {
     const f = $('#ovr-form').elements;
