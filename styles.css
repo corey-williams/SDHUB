@@ -234,10 +234,10 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 
 /* ---------- home / calendar ---------- */
 .home-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
-.cal-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
-.cal-nav { display: flex; gap: 6px; }
-.cal-filter { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
-.cal-filter select { min-height: 32px; padding: 4px 30px 4px 10px; }
+/* One compact row: month, filters, then the arrows on the right. */
+.cal-toolbar { display: flex; align-items: center; gap: 10px 16px; margin-bottom: 12px; flex-wrap: wrap; }
+.cal-toolbar #cal-title { font-size: 21px; min-width: 170px; }
+.cal-nav { display: flex; gap: 6px; margin-left: auto; }
 .legend { margin-left: auto; display: flex; gap: 14px; color: var(--muted); font-size: 12px; }
 .legend span { display: flex; align-items: center; gap: 6px; }
 .lg { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
@@ -866,7 +866,6 @@ body.is-supervisor .admin-only { display: none !important; }
 .pto-bar.abs-bar { background: color-mix(in srgb, var(--muted) 14%, var(--mix)); border-left: 3px solid var(--c); color: var(--text); padding-left: 6px; }
 .pto-bar.abs-bar b { font-weight: 500; color: var(--muted); margin-left: 3px; }
 .pto-bar.abs-bar.cont-l { border-left: 0; }
-.cal-filter select + label { margin-left: 8px; }
 
 /* ---------- admin: regions ---------- */
 .team-group {
@@ -998,6 +997,15 @@ dialog form, dialog .dialog-body { padding: 22px; display: flex; flex-direction:
   .pto-bar { font-size: 10.5px; padding: 0 4px; margin: 0 2px; }
   .week-bars { top: 32px; }
   .legend { margin-left: 0; }
+  /* PTO header: month and arrows on one line, filters underneath. */
+  .cal-toolbar { gap: 8px; }
+  .cal-toolbar #cal-title { min-width: 0; font-size: 18px; }
+  /* Holiday boxes are narrow on phones: smaller picture and text, long names wrap. */
+  .closed-name { font-size: 9.5px; overflow-wrap: anywhere; padding: 0 0 4px; }
+  .closed-sub { font-size: 8.5px; letter-spacing: 0; }
+  .day.closed .hol-art, .day.hol-july4 .fw-art { width: 24px; height: 24px; }
+  .day.themed .day-top { margin-bottom: 0; }
+  .lab-badge { margin: 4px 0; }
   .row2, .row3, .info-grid { grid-template-columns: 1fr; }
   .info-grid .span2 { grid-column: auto; }
   .ss-times label { flex: 1; }

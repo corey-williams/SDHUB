@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="app-icon-192.png" />
   <!-- ?v= on styles.css and app.js: changed with each update, so a new page
        never runs with an old cached app.js or styles.css (or the other way round). -->
-  <link rel="stylesheet" href="styles.css?v=20261124-17" />
+  <link rel="stylesheet" href="styles.css?v=20261124-21" />
   <!-- Dark mode is set before the page draws, so it never flashes light first. -->
   <script>try { if (localStorage.getItem('sdh-theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}</script>
 </head>
@@ -136,10 +136,7 @@
       <div class="pto-main">
       <div class="card calendar-card">
         <div class="cal-toolbar">
-          <div>
-            <h1 id="cal-title">Month</h1>
-            <p class="muted" id="cal-sub"></p>
-          </div>
+          <h1 id="cal-title">Month</h1>
           <div class="cal-nav">
             <button class="btn ghost icon" id="cal-prev" aria-label="Previous month">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 6l-6 6 6 6"/></svg>
@@ -148,18 +145,6 @@
             <button class="btn ghost icon" id="cal-next" aria-label="Next month">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg>
             </button>
-          </div>
-        </div>
-        <div class="cal-filter">
-          <label class="muted small" for="pto-region">Region</label>
-          <select id="pto-region"></select>
-          <label class="muted small" for="cal-employee">Person</label>
-          <select id="cal-employee"></select>
-          <div class="legend">
-            <span><i class="lg lg-pto"></i>PTO approved</span>
-            <span><i class="lg lg-pending"></i>PTO pending</span>
-            <span><i class="lg lg-abs"></i>Call-in</span>
-            <span class="muted">Click a day to request it off</span>
           </div>
         </div>
         <div class="cal-head">
@@ -914,6 +899,6 @@
       setTimeout(show, 12000);
     })();
   </script>
-  <script src="app.js?v=20261124-17"></script>
+  <script src="app.js?v=20261124-21"></script>
 </body>
 </html>

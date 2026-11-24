@@ -64,8 +64,6 @@
     // PTO tab
     view: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
     selected: null,
-    ptoRegion: 'all',
-    calFilter: 'all',
     ptoFilter: 'pending',
     // Admin
     editingId: null,
@@ -1263,7 +1261,6 @@
     showTab();
     renderNotes();
     renderHome();
-    renderPtoFilters();
     renderCalendar();
     renderPtoForm();
     renderPtoList();
@@ -2106,20 +2103,9 @@
   }
 
   // ---------- PTO tab: PTO-only calendar ----------
-  function renderPtoFilters() {
-    const regs = ['all', ...regionTabs()];
-    if (!regs.includes(S.ptoRegion)) S.ptoRegion = 'all';
-    $('#pto-region').innerHTML = regs.map((r) => `<option value="${esc(r)}">${r === 'all' ? 'All regions' : esc(regionLabel(r))}</option>`).join('');
-    $('#pto-region').value = S.ptoRegion;
-
-    const people = S.employees.filter((e) => visibleEmp(e) && inRegion(e, S.ptoRegion));
-    if (!people.some((e) => e.id === S.calFilter)) S.calFilter = 'all';
-    $('#cal-employee').innerHTML = `<option value="all">Everyone</option>` + people.map((e) => `<option value="${e.id}">${esc(e.name)}</option>`).join('');
-    $('#cal-employee').value = S.calFilter;
-  }
-
+  // The PTO calendar always shows everyone (minus hidden regions).
   function ptoVisible(e) {
-    return visibleEmp(e) && inRegion(e, S.ptoRegion) && (S.calFilter === 'all' || e.id === S.calFilter);
+    return visibleEmp(e);
   }
 
   // Call-ins for the PTO calendar. Where two overlap for one person, the newest wins (as on Home).
@@ -2139,10 +2125,6 @@
   function renderCalendar() {
     const y = S.view.getFullYear(), m = S.view.getMonth();
     $('#cal-title').textContent = S.view.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-    const monthStart = ymd(new Date(y, m, 1)), monthEnd = ymd(new Date(y, m + 1, 0));
-    const inMonth = S.pto.filter((p) => p.status !== 'denied' && p.start <= monthEnd && p.end >= monthStart && emp(p.employeeId) && ptoVisible(emp(p.employeeId)));
-    const approved = inMonth.filter((p) => p.status === 'approved').length;
-    $('#cal-sub').textContent = `${approved} approved · ${inMonth.length - approved} pending this month`;
 
     const first = new Date(y, m, 1);
     const start = new Date(y, m, 1 - first.getDay());
@@ -3629,8 +3611,6 @@
       S.view = new Date(now.getFullYear(), now.getMonth(), 1);
       renderCalendar();
     };
-    $('#pto-region').onchange = (ev) => { S.ptoRegion = ev.target.value; renderPtoFilters(); renderCalendar(); renderPtoList(); };
-    $('#cal-employee').onchange = (ev) => { S.calFilter = ev.target.value; renderCalendar(); renderPtoList(); };
     $('#cal-grid').onclick = (ev) => {
       // Clicking a PTO bar opens that request to change or delete it.
       const bar = ev.target.closest('[data-pto]');
