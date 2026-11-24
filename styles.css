@@ -996,7 +996,7 @@ body.disconnected main, body.disconnected .tabs, body.disconnected .topbar-right
 #connect-body p { margin: 0; }
 #connect-body .toggle { justify-content: center; }
 .sync { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 550; }
-.sync i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.sync svg { flex: none; }
 
 /* ---------- dialogs ---------- */
 dialog {

@@ -1317,9 +1317,9 @@
     badge.textContent = pending;
     const synced = S.data.updatedAt ? new Date(S.data.updatedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
     $('#admin-status').innerHTML =
-      `<span class="sync" title="Saving to ${esc(S.dir?.name || '')}/${DATA_FILE}${synced ? ' · last change ' + esc(synced) : ''}"><i></i>${esc(S.dir?.name || '')}</span>` +
+      `<span class="sync" title="Saving to ${esc(S.dir?.name || '')}/${DATA_FILE}${synced ? ' · last change ' + esc(synced) : ''}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6l2 2.2h8.4A1.5 1.5 0 0 1 21 8.7v9.8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></svg>${esc(S.dir?.name || '')}</span>` +
       (S.role
-        ? `<span class="pill ${S.role}">● ${S.role === 'admin' ? `Admin${adminName() ? ` · ${esc(firstName(adminName()))}` : ''}` : `Supervisor · ${esc(firstName(emp(S.supId)?.name || ''))}`}</span><button class="btn ghost sm" id="logout">Sign out</button>`
+        ? `<button class="btn ghost sm" id="logout" title="Signed in as ${esc(S.role === 'admin' ? adminName() || 'Admin' : emp(S.supId)?.name || 'Supervisor')}">Sign Out - ${S.role === 'admin' ? 'Admin' : 'Supervisor'}</button>`
         : '');
   }
 
