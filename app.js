@@ -3255,7 +3255,7 @@
     $('#split-delete').hidden = mode !== 'split' || !S.splitEditing;
     $('#abs-delete').hidden = mode !== 'absent' || !S.absEditing;
     const e = emp(S.ovrEmp);
-    if (e) $('#ovr-title').textContent = `${mode === 'split' ? 'Split shift' : mode === 'absent' ? 'Absent' : S.ovrTitleBase}: ${e.name}`;
+    if (e) $('#ovr-title').textContent = `${mode === 'split' ? 'Split Shift' : mode === 'absent' ? 'Call-in / Late / Early Out' : S.ovrTitleBase}: ${e.name}`;
     // Who set the adjustment, split or call-in being edited.
     const item =
       mode === 'split' ? S.splitEditing && S.splits.find((x) => x.id === S.splitEditing)
