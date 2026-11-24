@@ -4507,6 +4507,22 @@
     if (partial) toast(`Part of the page didn't load (${partial.message}). Reload in a minute; if you just uploaded an update, GitHub may still be publishing it.`, 'warn');
   }
 
+  // Light / dark mode: each browser remembers its own choice (index.html applies it before the page draws).
+  function applyTheme(dark) {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    const b = $('#theme-btn');
+    if (b) {
+      b.title = dark ? 'Light mode' : 'Dark mode';
+      b.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+    }
+  }
+  applyTheme(document.documentElement.dataset.theme === 'dark');
+  $('#theme-btn')?.addEventListener('click', () => {
+    const dark = document.documentElement.dataset.theme !== 'dark';
+    try { localStorage.setItem('sdh-theme', dark ? 'dark' : 'light'); } catch {}
+    applyTheme(dark);
+  });
+
   boot().catch((e) => {
     console.error(e);
     window.sdhStartupError?.(e);
