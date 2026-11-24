@@ -2371,12 +2371,46 @@
 
   function renderPtoList() {
     $$('#pto-filter button').forEach((b) => b.classList.toggle('on', b.dataset.f === S.ptoFilter));
-    const list = S.pto
-      .filter((p) => (S.ptoFilter === 'all' || p.status === S.ptoFilter) && emp(p.employeeId) && ptoVisible(emp(p.employeeId)))
-      .sort((a, b) => b.start.localeCompare(a.start));
-    $('#pto-list').innerHTML = list.length
-      ? list.map(requestRow).join('')
-      : `<div class="empty-big">No ${S.ptoFilter === 'all' ? '' : S.ptoFilter + ' '}requests to show.</div>`;
+    // Person picker: everyone who has a request.
+    const sel = $('#pto-person');
+    const people = [...new Set(S.pto.map((p) => p.employeeId))].map(emp).filter((e) => e && ptoVisible(e)).sort((a, b) => a.name.localeCompare(b.name));
+    if (S.ptoPerson && !people.some((e) => e.id === S.ptoPerson)) S.ptoPerson = '';
+    const opts = `<option value="">Everyone</option>` + people.map((e) => `<option value="${e.id}">${esc(e.name)}</option>`).join('');
+    if (sel.dataset.opts !== opts) { sel.innerHTML = opts; sel.dataset.opts = opts; }
+    sel.value = S.ptoPerson || '';
+
+    const today = ymd(new Date());
+    const list = S.pto.filter(
+      (p) => (S.ptoFilter === 'all' || p.status === S.ptoFilter) && emp(p.employeeId) && ptoVisible(emp(p.employeeId)) && (!S.ptoPerson || p.employeeId === S.ptoPerson)
+    );
+    if (!list.length) {
+      $('#pto-list').innerHTML = `<div class="empty-big">No ${S.ptoFilter === 'all' ? '' : S.ptoFilter + ' '}requests to show.</div>`;
+      return;
+    }
+    // Upcoming and current first (soonest at the top), then past (most recent first, folded away).
+    const upcoming = list.filter((p) => p.end >= today).sort((a, b) => a.start.localeCompare(b.start));
+    const past = list.filter((p) => p.end < today).sort((a, b) => b.start.localeCompare(a.start));
+    const byMonth = (rows) => {
+      let html = '', cur = '';
+      for (const p of rows) {
+        const m = p.start.slice(0, 7);
+        if (m !== cur) {
+          cur = m;
+          const n = rows.filter((x) => x.start.startsWith(m)).length;
+          html += `<div class="req-month">${esc(fmtDate(`${m}-01`, { month: 'long', year: 'numeric' }))}<span>${n}</span></div>`;
+        }
+        html += requestRow(p);
+      }
+      return html;
+    };
+    $('#pto-list').innerHTML =
+      `<div class="req-sec">Upcoming &amp; current<span>${upcoming.length}</span></div>` +
+      (upcoming.length ? byMonth(upcoming) : `<div class="empty">Nothing upcoming.</div>`) +
+      (past.length
+        ? `<button type="button" class="req-sec req-past-toggle" id="pto-past-toggle" aria-expanded="${!!S.ptoPast}">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 6l6 6-6 6"/></svg>Past<span>${past.length}</span></button>` +
+          (S.ptoPast ? byMonth(past) : '')
+        : '');
   }
 
   // ---------- Admin ----------
@@ -4015,6 +4049,12 @@
       S.ptoFilter = b.dataset.f;
       renderPtoList();
     };
+    $('#pto-person').onchange = (ev) => { S.ptoPerson = ev.target.value; renderPtoList(); };
+    $('#pto-list').addEventListener('click', (ev) => {
+      if (!ev.target.closest('#pto-past-toggle')) return;
+      S.ptoPast = !S.ptoPast;
+      renderPtoList();
+    });
 
     // buttons in lists
     document.addEventListener('click', async (ev) => {
